@@ -66,6 +66,16 @@
          	android:layout_gravity="center"
 			android:gravity="center"
          	android:text="@string/close"/> 
+      	
+      	<!-- TODO must be dynamic, for each field -->
+      			<Button
+         	android:id="@+id/FactAdderAddMediaButton"
+         	android:layout_height="fill_parent"
+         	android:layout_width="0dip"
+         	android:layout_weight="1"
+         	android:layout_gravity="center"
+			android:gravity="center"
+         	android:text="add media"/> 
       	</LinearLayout>
 	</LinearLayout>
 </ScrollView>

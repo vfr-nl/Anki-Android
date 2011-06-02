@@ -73,6 +73,7 @@ public class FactAdder extends Activity {
 
     private Button mAddButton;
     private Button mCloseButton;
+    private Button mAddMediaButton;
     private Button mModelButton;
     private Button mCardModelButton;
     private ListView mCardModelListView;
@@ -144,6 +145,7 @@ public class FactAdder extends Activity {
 
         mAddButton = (Button) findViewById(R.id.FactAdderAddButton);
         mCloseButton = (Button) findViewById(R.id.FactAdderCloseButton);
+        mAddMediaButton = (Button) findViewById(R.id.FactAdderAddMediaButton);
         mModelButton = (Button) findViewById(R.id.FactAdderModelButton);
         mCardModelButton = (Button) findViewById(R.id.FactAdderCardModelButton);
         mTags = (Button) findViewById(R.id.FactAdderTagButton);
@@ -190,6 +192,15 @@ public class FactAdder extends Activity {
 
             public void onClick(View v) {
                 closeFactAdder();
+            }
+
+        });
+
+        mAddMediaButton.setOnClickListener(new View.OnClickListener() {
+
+            public void onClick(View v) {
+                Intent intent = new Intent(FactAdder.this, com.ichi2.anki.PictureBrowser.class);
+                startActivity(intent);
             }
 
         });
