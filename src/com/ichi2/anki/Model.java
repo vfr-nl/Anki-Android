@@ -65,6 +65,11 @@ public class Model {
      */
     private static HashMap<Long, Model> sCardModelToModelMap = new HashMap<Long, Model>();
 
+    /**
+     * Whether the night mode has changed, meaning mColorCardModelMap needs to be reset.
+     */
+    private static boolean mNightModeChanged = false;
+    
     // BEGIN SQL table entries
     private long mId; // Primary key
     private long mDeckId; // Foreign key
@@ -124,6 +129,12 @@ public class Model {
         sModels = new HashMap<Long, Model>();
         sCardModelToModelMap = new HashMap<Long, Model>();
     }
+    
+    public static final void nightModeChanged() {
+        mNightModeChanged = true;
+        mColorCardModelMap.clear();
+    }
+
 
 
     /**
@@ -332,7 +343,7 @@ public class Model {
             mColorCardModelMap.put(myCardModel.getId(), color);
         }
     }
-
+    
 
     /**
      * Returns a cached CSS for the font color and font size of a given CardModel taking into account the included

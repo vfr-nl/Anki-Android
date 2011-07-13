@@ -829,9 +829,10 @@ public class StudyOptions extends Activity {
                 if (mInvertedColors != isChecked) {
                     mInvertedColors = isChecked;
                     savePreferences("invertedColors");
+                    Model.nightModeChanged();
                 }
             }
-            });
+        });
         mHelp = (TextView) mStudyOptionsView.findViewById(R.id.studyoptions_help);
         mHelp.setOnClickListener(mButtonClickListener);
 
@@ -1404,7 +1405,7 @@ public class StudyOptions extends Activity {
         DeckTask.waitToFinish();
         if (deck != null) {
             deck.reset();
-        	updateValuesFromDeck();        	
+        	updateValuesFromDeck();
         }
     }
 
