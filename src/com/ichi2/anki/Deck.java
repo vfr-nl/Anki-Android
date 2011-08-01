@@ -23,7 +23,6 @@ import android.content.ContentValues;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteStatement;
 import android.util.Log;
 
@@ -31,6 +30,10 @@ import com.ichi2.anki.Fact.Field;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.tmatesoft.sqljet.core.SqlJetException;
+import org.tmatesoft.sqljet.core.SqlJetTransactionMode;
+import org.tmatesoft.sqljet.core.table.ISqlJetCursor;
+import org.tmatesoft.sqljet.core.table.SqlJetDb;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -236,63 +239,89 @@ public class Deck {
 
     public static synchronized Deck openDeck(String path, boolean rebuild) throws SQLException {
         Deck deck = null;
-        Cursor cursor = null;
+        
+        //Cursor cursor = null;
+        ISqlJetCursor cursor = null;
+        
         Log.i(AnkiDroidApp.TAG, "openDeck - Opening database " + path);
-        AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(path);
-
+        
         try {
-            // Read in deck table columns
-            cursor = ankiDB.getDatabase().rawQuery("SELECT * FROM decks LIMIT 1", null);
+            //AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(path);
+            File dbFile = new File(path);
+            SqlJetDb ankiDB = SqlJetDb.open(dbFile, true);
+            // db.getOptions().setAutovacuum(true);
+            ankiDB.beginTransaction(SqlJetTransactionMode.WRITE);
 
-            if (!cursor.moveToFirst()) {
+            // Read in deck table columns
+            //cursor = ankiDB.getDatabase().rawQuery("SELECT * FROM decks LIMIT 1", null);
+            cursor = ankiDB.getTable("decks").open();
+            
+            //if (!cursor.moveToFirst()) {
+            //    return null;
+            //}
+            if (cursor.eof()) {
                 return null;
             }
 
             deck = new Deck();
 
-            deck.mId = cursor.getLong(0);
-            deck.mCreated = cursor.getDouble(1);
-            deck.mModified = cursor.getDouble(2);
+            /*
+             * SQLite -> SQLJet
+             * 
+             * getLong -> getInteger
+             * getDouble -> getFloat
+             * getInt -> (int)getInteger
+             */
+            
+            //deck.mId = cursor.getLong(0);
+            deck.mId = cursor.getInteger(0);
+            deck.mCreated = cursor.getFloat(1);
+            deck.mModified = cursor.getFloat(2);
             deck.mDescription = cursor.getString(3);
-            deck.mVersion = cursor.getInt(4);
-            deck.mCurrentModelId = cursor.getLong(5);
+            deck.mVersion = (int)cursor.getInteger(4);
+            deck.mCurrentModelId = cursor.getInteger(5);
             deck.mSyncName = cursor.getString(6);
-            deck.mLastSync = cursor.getDouble(7);
-            deck.mHardIntervalMin = cursor.getDouble(8);
-            deck.mHardIntervalMax = cursor.getDouble(9);
-            deck.mMidIntervalMin = cursor.getDouble(10);
-            deck.mMidIntervalMax = cursor.getDouble(11);
-            deck.mEasyIntervalMin = cursor.getDouble(12);
-            deck.mEasyIntervalMax = cursor.getDouble(13);
-            deck.mDelay0 = cursor.getLong(14);
-            deck.mDelay1 = cursor.getLong(15);
-            deck.mDelay2 = cursor.getDouble(16);
-            deck.mCollapseTime = cursor.getDouble(17);
+            deck.mLastSync = cursor.getFloat(7);
+            deck.mHardIntervalMin = cursor.getFloat(8);
+            deck.mHardIntervalMax = cursor.getFloat(9);
+            deck.mMidIntervalMin = cursor.getFloat(10);
+            deck.mMidIntervalMax = cursor.getFloat(11);
+            deck.mEasyIntervalMin = cursor.getFloat(12);
+            deck.mEasyIntervalMax = cursor.getFloat(13);
+            deck.mDelay0 = cursor.getInteger(14);
+            deck.mDelay1 = cursor.getInteger(15);
+            deck.mDelay2 = cursor.getFloat(16);
+            deck.mCollapseTime = cursor.getFloat(17);
             deck.mHighPriority = cursor.getString(18);
             deck.mMedPriority = cursor.getString(19);
             deck.mLowPriority = cursor.getString(20);
             deck.mSuspended = cursor.getString(21);
-            deck.mNewCardOrder = cursor.getInt(22);
-            deck.mNewCardSpacing = cursor.getInt(23);
-            deck.mFailedCardMax = cursor.getInt(24);
-            deck.mNewCardsPerDay = cursor.getInt(25);
-            deck.mSessionRepLimit = cursor.getInt(26);
-            deck.mSessionTimeLimit = cursor.getInt(27);
-            deck.mUtcOffset = cursor.getDouble(28);
-            deck.mCardCount = cursor.getInt(29);
-            deck.mFactCount = cursor.getInt(30);
-            deck.mFailedNowCount = cursor.getInt(31);
-            deck.mFailedSoonCount = cursor.getInt(32);
-            deck.mRevCount = cursor.getInt(33);
-            deck.mNewCount = cursor.getInt(34);
-            deck.mRevCardOrder = cursor.getInt(35);
+            deck.mNewCardOrder = (int)cursor.getInteger(22);
+            deck.mNewCardSpacing = (int)cursor.getInteger(23);
+            deck.mFailedCardMax = (int)cursor.getInteger(24);
+            deck.mNewCardsPerDay = (int)cursor.getInteger(25);
+            deck.mSessionRepLimit = (int)cursor.getInteger(26);
+            deck.mSessionTimeLimit = (int)cursor.getInteger(27);
+            deck.mUtcOffset = cursor.getFloat(28);
+            deck.mCardCount = (int)cursor.getInteger(29);
+            deck.mFactCount = (int)cursor.getInteger(30);
+            deck.mFailedNowCount = (int)cursor.getInteger(31);
+            deck.mFailedSoonCount = (int)cursor.getInteger(32);
+            deck.mRevCount = (int)cursor.getInteger(33);
+            deck.mNewCount = (int)cursor.getInteger(34);
+            deck.mRevCardOrder = (int)cursor.getInteger(35);
 
-            Log.i(AnkiDroidApp.TAG, "openDeck - Read " + cursor.getColumnCount() + " columns from decks table.");
-        } catch (SQLiteException e) {
+            //Log.i(AnkiDroidApp.TAG, "openDeck - Read " + cursor.getColumnCount() + " columns from decks table.");
+        //} catch (SQLiteException e) {
+        } catch (SqlJetException e) {
             return null;
         } finally {
             if (cursor != null) {
-                cursor.close();
+                try {
+                    cursor.close();
+                } catch (SqlJetException e) {
+                    Log.e(AnkiDroidApp.TAG, e.getMessage());
+                }
             }
         }
         Log.i(AnkiDroidApp.TAG, String.format(Utils.ENGLISH_LOCALE, "openDeck - modified: %f currentTime: %f", deck.mModified, Utils.now()));
