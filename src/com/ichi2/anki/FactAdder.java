@@ -248,7 +248,7 @@ public class FactAdder extends Activity {
         mAddMediaButton.setOnClickListener(new View.OnClickListener() {
 
             public void onClick(View v) {
-                Intent intent = new Intent(FactAdder.this, com.ichi2.anki.PictureBrowser.class);
+                Intent intent = new Intent(FactAdder.this, com.ichi2.anki.MediaChooser.class);
                 startActivity(intent);
             }
 
