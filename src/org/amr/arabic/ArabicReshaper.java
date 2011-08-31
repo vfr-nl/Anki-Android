@@ -81,6 +81,7 @@ public class ArabicReshaper{
 
 
 	public static char[][] ARABIC_GLPHIES=
+		// basic, isolated, initial, middle, final, nb of forms
 	{{ '\u0622','\uFE81','\uFE81','\uFE82','\uFE82',2 } ,
 		{ '\u0623','\uFE82','\uFE83','\uFE84','\uFE84',2 } ,
 		{ '\u0624','\uFE85','\uFE85','\uFE86','\uFE86',2 } ,
@@ -121,7 +122,13 @@ public class ArabicReshaper{
 		{ '\u0671','\u0671','\u0671','\uFB51','\uFB51',2 },       
 		{'\u06AA','\uFB8E','\uFB90','\uFB91','\uFB8F',4 },       
 		{ '\u06C1','\uFBA6','\uFBA8','\uFBA9','\uFBA7',4 },      
-		{'\u06E4','\u06E4','\u06E4','\u06E4','\uFEEE',2 }
+		{'\u06E4','\u06E4','\u06E4','\u06E4','\uFEEE',2 },
+		{'\u0686','\uFB7A','\uFB7C','\uFB7D','\uFB7B',4 },
+		{'\u067E','\uFB56','\uFB58','\uFB59','\uFB57',4 },
+		{'\u0698','\uFB8A','\uFB8A','\uFB8B','\uFB8B',2 },
+		{'\u06AF','\uFB92','\uFB94','\uFB95','\uFB93',4 },
+		{'\u06CC','\uFEEF','\uFEF3','\uFEF4','\uFEF0',4 },
+		{'\u06A9','\uFB8E','\uFB90','\uFB91','\uFB8F',4 },
 	};
 
 
@@ -266,32 +273,15 @@ public class ArabicReshaper{
 	/**
 	 * Constructor of the Class
 	 * @param unshapedWord The unShaped Word
-	 * @param forWebView whether the word will be displayed in a WebView
 	 */
-	public ArabicReshaper(String unshapedWord, boolean forWebView){
+	public ArabicReshaper(String unshapedWord){
 		unshapedWord = replaceLamAlef(unshapedWord);
 		DecomposedWord decomposedWord = new DecomposedWord(unshapedWord);
 		if (decomposedWord.stripedRegularLetters.length > 0) {
 			_returnString=reshapeIt(new String(decomposedWord.stripedRegularLetters));
 		}
 		_returnString = decomposedWord.reconstructWord(_returnString);
-		if(forWebView) {
-			// heuristic trying to determine cases where Android's WebView will forget
-			// to display the arabic words right-to-left:
-			// 1) any diacritic (assumed to match harakates detected during decomposition, this should be checked...)
-			// 2) isolated alif (\u0627)
-			if(decomposedWord.stripedHarakates.length != 0 ||
-					_returnString.indexOf('\u0627') != -1) {
-				// reverse the word to force RTL display
-				_returnString = (new StringBuilder(_returnString)).reverse().toString();
-			}
-		}
 	}
-
-	public ArabicReshaper(String unshapedWord){
-		this(unshapedWord, false);
-	}
-
 
 	/**
 	 * Decompose the word into two parts:
@@ -352,7 +342,12 @@ public class ArabicReshaper{
 			for(int index = 0; index < harakatesPositions.length; index++) {
 				wordWithHarakates[harakatesPositions[index]] = stripedHarakates[index];
 			}
-
+			
+			// harakate on the final letter is always badly displayed, and sometimes mixes up all the display, so remove it
+			if(isHaraka(wordWithHarakates[wordWithHarakates.length - 1]))	{
+				
+				return new String(wordWithHarakates, 0, wordWithHarakates.length - 1);
+			}
 
 			return new String(wordWithHarakates);
 
@@ -378,7 +373,14 @@ public class ArabicReshaper{
 
 
 		//for the first letter
-		reshapedWord.append(getReshapedGlphy(wordLetters[0], 2));//2 is the Form when the Letter is at the start of the word
+		if(wordLength > 1)
+		{
+			reshapedWord.append(getReshapedGlphy(wordLetters[0], 2));//2 is the Form when the Letter is at the start of the word
+		}
+		else
+		{
+			reshapedWord.append(getReshapedGlphy(wordLetters[0], 1));//1 isolated
+		}
 
 
 		//iteration from the second till the second to last

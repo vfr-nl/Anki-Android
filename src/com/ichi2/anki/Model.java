@@ -19,7 +19,9 @@ package com.ichi2.anki;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.graphics.Color;
 
+import com.ichi2.themes.Themes;
 import com.mindprod.common11.StringTools;
 
 import java.util.ArrayList;
@@ -186,8 +188,6 @@ public class Model {
 
 
     public TreeMap<Long, FieldModel> getFieldModels() {
-
-        FieldModel mFieldModel;
         TreeMap<Long, FieldModel> mFieldModels = new TreeMap<Long, FieldModel>();
         FieldModel.fromDb(mDeck, mId, mFieldModels);
         return mFieldModels;
@@ -311,12 +311,12 @@ public class Model {
     /**
      * Prepares the CSS for all CardModels in this Model
      */
-    private void prepareCSSForCardModels(boolean invertedColors) {
+    private void prepareCSSForCardModels(boolean invertedColors, int nightModeBackground) {
         CardModel myCardModel = null;
         String cssString = null;
         for (Map.Entry<Long, CardModel> entry : mCardModelsMap.entrySet()) {
             myCardModel = entry.getValue();
-            cssString = createCSSForFontColorSize(myCardModel.getId(), mDisplayPercentage, invertedColors);
+            cssString = createCSSForFontColorSize(myCardModel.getId(), mDisplayPercentage, invertedColors, nightModeBackground);
             mCssCardModelMap.put(myCardModel.getId(), cssString);
         }
     }
@@ -325,12 +325,16 @@ public class Model {
     /**
      * Prepares the Background Colors for all CardModels in this Model
      */
-    private void prepareColorForCardModels(boolean invertedColors) {
+    private void prepareColorForCardModels(boolean invertedColors, int nightModeBackground) {
         CardModel myCardModel = null;
         String color = null;
+        mColorCardModelMap.clear();
         for (Map.Entry<Long, CardModel> entry : mCardModelsMap.entrySet()) {
             myCardModel = entry.getValue();
             color = invertColor(myCardModel.getLastFontColour(), invertedColors);
+        	if (nightModeBackground != Color.BLACK && Color.parseColor(color) == Color.BLACK) {
+        		color = String.format("#%X", nightModeBackground);
+        	}
             mColorCardModelMap.put(myCardModel.getId(), color);
         }
     }
@@ -345,26 +349,24 @@ public class Model {
      *            fontmodel font size
      * @return the html contents surrounded by a css style which contains class styles for answer/question and fields
      */
-    protected final String getCSSForFontColorSize(long myCardModelId, int percentage, boolean invertedColors) {
-        // tjek whether the percentage is this the same as last time
+    protected final String getCSSForFontColorSize(long myCardModelId, int percentage, boolean invertedColors, int nightModeBackground) {
+        // If the percentage or night mode has changed, prepare for them.
         if (mDisplayPercentage != percentage || mInvertedColor != invertedColors) {
             mDisplayPercentage = percentage;
             mInvertedColor = invertedColors;
-            prepareCSSForCardModels(invertedColors);
+            prepareColorForCardModels(invertedColors, nightModeBackground);
+            prepareCSSForCardModels(invertedColors, nightModeBackground);
         }
         return mCssCardModelMap.get(myCardModelId);
     }
 
 
-    protected final String getBackgroundColor(long myCardModelId, boolean invertedColors) {
-    	if (mColorCardModelMap.size() == 0) {
-    		prepareColorForCardModels(invertedColors);
-    	}
+    protected final int getBackgroundColor(long myCardModelId) {
 		String color = mColorCardModelMap.get(myCardModelId);
 		if (color != null) {
-			return color;
+			return Color.parseColor(color);
 		} else {
-			return "#FFFFFF";
+			return Color.WHITE;
         }
     }
 
@@ -374,7 +376,7 @@ public class Model {
      * @param percentage the factor to apply to the font size in card model to the display size (in %)
      * @return the html contents surrounded by a css style which contains class styles for answer/question and fields
      */
-    private String createCSSForFontColorSize(long myCardModelId, int percentage, boolean invertedColors) {
+    private String createCSSForFontColorSize(long myCardModelId, int percentage, boolean invertedColors, int nightModeBackground) {
         StringBuffer sb = new StringBuffer();
         sb.append("<!-- ").append(percentage).append(" % display font size-->");
         sb.append("<style type=\"text/css\">\n");
@@ -382,17 +384,21 @@ public class Model {
 
         // body background
         if (null != myCardModel.getLastFontColour() && 0 < myCardModel.getLastFontColour().trim().length()) {
-            sb.append("body {background-color:").append(invertColor(myCardModel.getLastFontColour(), invertedColors)).append(";}\n");
+        	String color = invertColor(myCardModel.getLastFontColour(), invertedColors);
+        	if (nightModeBackground != Color.BLACK && Color.parseColor(color) == Color.BLACK) {
+        		color = String.format("#%X", nightModeBackground);
+        	}
+            sb.append("body {background-color:").append(color).append(";}\n");
         }
         // question
         sb.append(".").append(Reviewer.QUESTION_CLASS).append(" {\n");
         sb.append(calculateDisplay(percentage, myCardModel.getQuestionFontFamily(), myCardModel.getQuestionFontSize(),
                 myCardModel.getQuestionFontColour(), myCardModel.getQuestionAlign(), false, invertedColors));
         sb.append("}\n");
-        // answer
+        // answer (alignment is stored in question as alignment is shared in question and answer)
         sb.append(".").append(Reviewer.ANSWER_CLASS).append(" {\n");
         sb.append(calculateDisplay(percentage, myCardModel.getAnswerFontFamily(), myCardModel.getAnswerFontSize(),
-                myCardModel.getAnswerFontColour(), myCardModel.getAnswerAlign(), false, invertedColors));
+                myCardModel.getAnswerFontColour(), myCardModel.getQuestionAlign(), false, invertedColors));
         sb.append("}\n");
         // css for fields. Gets css for all fields no matter whether they actually are used in a given card model
         FieldModel myFieldModel = null;
@@ -411,6 +417,44 @@ public class Model {
         return sb.toString();
     }
 
+
+    /**
+     * Returns a string where all colors have been inverted.
+     * It applies to anything that is in a tag and looks like #FFFFFF
+     * 
+     * Example: Here only #000000 will be replaced (#777777 is content)
+     * <span style="color: #000000;">Code #777777 is the grey color</span>
+     * 
+     * This is done with a state machine with 2 states:
+     *  - 0: within content
+     *  - 1: within a tag
+     */
+    public static String invertColors(String text, boolean invert) {
+        if (invert) {
+            int state = 0;
+            StringBuffer inverted = new StringBuffer(text.length());
+            for(int i=0; i<text.length(); i++) {
+                char character = text.charAt(i);
+                if (state == 1 && character == '#') {
+                    inverted.append(invertColor(text.substring(i+1, i+7), true));
+                }
+                else {
+                    if (character == '<') {
+                        state = 1;
+                    }
+                    if (character == '>') {
+                        state = 0;
+                    }
+                    inverted.append(character);
+                }
+            }
+            return inverted.toString();
+        }
+        else {
+            return text;
+        }
+    }
+    
 
     private static String invertColor(String color, boolean invert) {
     	if (invert) {

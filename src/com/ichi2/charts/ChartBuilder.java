@@ -46,15 +46,17 @@ import android.view.ViewGroup.LayoutParams;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.ichi2.anim.ActivityTransitionAnimation;
 import com.ichi2.anki.AnkiDroidApp;
-import com.ichi2.anki.MyAnimation;
 import com.ichi2.anki.R;
 import com.ichi2.anki.Statistics;
 import com.ichi2.anki.StudyOptions;
+import com.ichi2.themes.Themes;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
 public class ChartBuilder extends Activity {
     public static final String TYPE = "type";
+    public static final int ZOOM_MAX = 20;
 
     private XYMultipleSeriesDataset mDataset = new XYMultipleSeriesDataset();
     private XYMultipleSeriesRenderer mRenderer = new XYMultipleSeriesRenderer();
@@ -155,7 +157,7 @@ public class ChartBuilder extends Activity {
     public void closeChartBuilder() {
         finish();
         if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
-            MyAnimation.slide(this, MyAnimation.UP);
+            ActivityTransitionAnimation.slide(this, ActivityTransitionAnimation.UP);
         }
     }
 
@@ -183,7 +185,7 @@ public class ChartBuilder extends Activity {
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        menu.findItem(MENU_ZOOM_IN).setEnabled(zoom < 10);
+        menu.findItem(MENU_ZOOM_IN).setEnabled(zoom < ZOOM_MAX);
         menu.findItem(MENU_ZOOM_OUT).setEnabled(zoom > 0);
         return true;
     }
@@ -202,7 +204,7 @@ public class ChartBuilder extends Activity {
                 Intent intent = new Intent(this, com.ichi2.charts.ChartBuilder.class);
                 startActivity(intent);
                 if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
-                    MyAnimation.slide(this, MyAnimation.FADE);
+                    ActivityTransitionAnimation.slide(this, ActivityTransitionAnimation.FADE);
                 }
                 return true;
             case MENU_ZOOM_IN:
@@ -223,6 +225,7 @@ public class ChartBuilder extends Activity {
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+    	Themes.applyTheme(this);
         super.onCreate(savedInstanceState);
         restorePreferences();
         if (mFullScreen) {
@@ -230,11 +233,15 @@ public class ChartBuilder extends Activity {
                     .setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
             requestWindowFeature(Window.FEATURE_NO_TITLE);
         }
-        setContentView(R.layout.statistics);
+        View mainView = getLayoutInflater().inflate(R.layout.statistics, null);
+        setContentView(mainView);
+        int[] colors = Themes.getChartColors();
+        mainView.setBackgroundColor(colors[1]);
         mTitle = (TextView) findViewById(R.id.statistics_title);
         if (mChartView == null) {
             if (mFullScreen) {
                 mTitle.setText(Statistics.sTitle);
+                mTitle.setTextColor(colors[0]);
             } else {
                 setTitle(Statistics.sTitle);
                 mTitle.setVisibility(View.GONE);
@@ -257,6 +264,10 @@ public class ChartBuilder extends Activity {
             mRenderer.setYAxisMin(0);
             mRenderer.setXTitle(Statistics.axisLabels[0]);
             mRenderer.setYTitle(Statistics.axisLabels[1]);
+            mRenderer.setBackgroundColor(colors[1]);
+            mRenderer.setMarginsColor(colors[1]);
+            mRenderer.setAxesColor(colors[0]);
+            mRenderer.setLabelsColor(colors[0]);
             mRenderer.setZoomEnabled(false, false);
             if (Statistics.sSeriesList[0][0] > 100 || Statistics.sSeriesList[0][1] > 100 || Statistics.sSeriesList[0][Statistics.sSeriesList[0].length - 1] > 100) {
                 mRenderer.setMargins(new int[] { 15, 50, 25, 0 });
@@ -282,7 +293,7 @@ public class ChartBuilder extends Activity {
         		return false;
         		}
         	});
-        zoom = Statistics.sZoom;
+		zoom = Statistics.sZoom;
         if (zoom > 0) {
         	zoom();
         }

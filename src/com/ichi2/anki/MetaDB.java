@@ -1,5 +1,8 @@
 package com.ichi2.anki;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -13,7 +16,17 @@ public class MetaDB {
     public static final int LANGUAGE_ANSWER = 1;
     public static final int LANGUAGE_UNDEFINED = 2;
 
+    private static final Pattern quotePattern = Pattern.compile("[\"']");
+
     private static SQLiteDatabase mMetaDb = null;
+
+
+    private static String stripQuotes(String text) {
+        Matcher matcher = quotePattern.matcher(text);
+        text = matcher.replaceAll("");
+        return text;
+    }
+
 
     public static void openDB(Context context) {
         try {
@@ -89,6 +102,7 @@ public class MetaDB {
 
     public static void storeLanguage(Context context, String deckPath, long modelId, long cardModelId, int qa, String language) {
         openDBIfClosed(context);
+        deckPath = stripQuotes(deckPath);
         try {
             mMetaDb.execSQL(
                     "INSERT INTO languages (deckpath, modelid, cardmodelid, qa, language) "
@@ -103,10 +117,11 @@ public class MetaDB {
     public static String getLanguage(Context context, String deckPath, long modelId, long cardModelId, int qa) {
         openDBIfClosed(context);
         String language = "";
+        deckPath = stripQuotes(deckPath);
         Cursor cur = null;
         try {
             String query =
-                "SELECT language FROM languages"
+                "SELECT language FROM languages "
                 + "WHERE deckpath = \'" + deckPath+ "\' "
                 + "AND modelid = " + modelId + " "
                 + "AND cardmodelid = " + cardModelId + " "
@@ -129,6 +144,7 @@ public class MetaDB {
 
     public static boolean resetDeckLanguages(Context context, String deckPath) {
         openDBIfClosed(context);
+        deckPath = stripQuotes(deckPath);
         try {
             mMetaDb.execSQL("DELETE FROM languages WHERE deckpath = \'" + deckPath + "\';");
             Log.i(AnkiDroidApp.TAG, "Resetting language assignment for deck " + deckPath);
@@ -144,7 +160,7 @@ public class MetaDB {
         Cursor cur = null;
         try {
             cur = mMetaDb.rawQuery("SELECT state FROM whiteboardState"
-                    + " WHERE deckpath = \'" + deckPath + "\'", null);
+                    + " WHERE deckpath = \'" + stripQuotes(deckPath) + "\'", null);
             if (cur.moveToNext()) {
                 return cur.getInt(0);
             } else {
@@ -163,6 +179,7 @@ public class MetaDB {
 
     public static void storeWhiteboardState(Context context, String deckPath, int state) {
         openDBIfClosed(context);
+        deckPath = stripQuotes(deckPath);
         Cursor cur = null;
         try {
             cur = mMetaDb.rawQuery("SELECT _id FROM whiteboardState"
@@ -172,13 +189,11 @@ public class MetaDB {
                         + "SET deckpath=\'" + deckPath + "\', "
                         + "state=" + Integer.toString(state) + " "
                         + "WHERE _id=" + cur.getString(0) + ";");
-                Log.i(AnkiDroidApp.TAG,
-                        "Store whiteboard state (" + state + ") for deck " + deckPath);
+                Log.i(AnkiDroidApp.TAG, "Store whiteboard state (" + state + ") for deck " + deckPath);
             } else {
                 mMetaDb.execSQL("INSERT INTO whiteboardState (deckpath, state) VALUES (?, ?)",
                         new Object[]{deckPath, state});
-                Log.i(AnkiDroidApp.TAG,
-                        "Store whiteboard state (" + state + ") for deck " + deckPath);
+                Log.i(AnkiDroidApp.TAG, "Store whiteboard state (" + state + ") for deck " + deckPath);
             }
         } catch(Exception e) {
               Log.e("Error", "Error storing whiteboard state in MetaDB ", e);
