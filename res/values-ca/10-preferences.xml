@@ -62,11 +62,14 @@
   <string name="dictionary_summ">Diccionari on realitzar les cerques: XXX</string>
   <string name="reset_languages">Reinicia tots el idiomes</string>
   <string name="reset_languages_summ">Reinicia les assignacions d\'idioma (per text a la síntesi de veu i els diccionaris) per a tots els paquets. Reinicia les assignacions específiques dels paquets al selector de paquets</string>
+  <string name="reset_all">Reset All</string>
+  <string name="reset_all_summ">Reset language, widget, whiteboard and dictionary states</string>
   <string name="reset_dialogs">Reset Dialogs</string>
   <string name="reset_dialogs_question">Reset all dialogs?</string>
   <string name="reset_dialogs_summ">Reset all dialogs which are set to be not shown again</string>
   <string name="reset_languages_question">Voleu reiniciar les assignacions de tots el idiomes?</string>
-  <string name="reset_languages_confirmation">Restableix tots els idiomes</string>
+  <string name="reset_all_question">Reset all language, widget, whiteboard and dictionary states?</string>
+  <string name="reset_confirmation">All states reset</string>
   <string name="use_ruby_support">Permet anotacions de ruby</string>
   <string name="use_ruby_support_summ">El text inclòs entre corxets  \'[\' i \']\' es tractaràn con una anotació de ruby</string>
   <string name="display_font_size">Tipus de lletra de mida relativa</string>
@@ -86,7 +89,7 @@
   <string name="zoom">Activa l\'ampliació</string>
   <string name="zoom_summ">Mostra els botons d\'ampliació a les fitxes</string>
   <string name="zeemote">Controlador Zeemote JS1</string>
-  <string name="zeemote_summ">Valora les fitxes amb els botons del controlador Zeemote JS1. A: Correcte, B: Repeteix-ho, D: Fàcil</string>
+  <string name="zeemote_summ">Use Zeemote JS1 controller to navigate reviews.</string>
   <string name="swipe">Habilita els gestos</string>
   <string name="swipe_summ_off">Feu servir gestos per canviar entre les pantalles i fitxes de resposta. Aquesta opció no és compatible amb els controls de zoom</string>
   <string name="swipe_summ_on">Passeu el dit horitzontalment per canviar entre les pantalles. Ajusteu diverses accions a sota</string>
@@ -101,6 +104,11 @@
   <string name="gestures_tap_bottom">Toqueu la part inferior</string>
   <string name="gestures_tap_left">Toqueu a l\'esquerra</string>
   <string name="gestures_tap_right">Toqueu a la dreta</string>
+  <string name="pref_cat_scrolling">Hardware up/down buttons</string>
+  <string name="more_scrolling_buttons">eReader</string>
+  <string name="more_scrolling_buttons_summ">Also use Kanji/Katakana, Emoji/Kao-moji buttons for scrolling.</string>
+  <string name="double_scrolling_gap">Double scrolling</string>
+  <string name="double_scrolling_gap_summ">Enable this if you want to double the scroll gap.</string>
   <string name="swipe_sensibility">Sensibilitat per passar el dit</string>
   <string name="swipe_sensibility_summ">Sensibilitat dels gestos: XXX</string>
   <string name="tts">Síntesi de veu</string>
@@ -122,6 +130,8 @@
   <string name="timeout_answer_summ">After displaying the Question for a set amount of time, the answer is displayed automatically without user input</string>
   <string name="timeout_answer_seconds">Seconds before the answer is shown</string>
   <string name="timeout_answer_seconds_summ">Select the amount of time before answer is automatically shown</string>
+  <string name="timeout_question_seconds">Seconds before the next question is shown</string>
+  <string name="timeout_question_seconds_summ">Select the amount of time before next question is automatically shown</string>
   <string name="select_locale_title">Seleccioneu l\'idioma</string>
   <string name="select_theme">Theme</string>
   <string name="theme_animations">Animations</string>

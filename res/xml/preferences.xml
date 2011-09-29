@@ -250,6 +250,14 @@
 				android:dialogTitle="@string/reset_languages"
 				android:dialogMessage="@string/reset_languages_question"
 				android:summary="@string/reset_languages_summ" />
+			<com.ichi2.preferences.CustomDialogPreference
+				android:dialogIcon="@android:drawable/ic_dialog_alert"
+				android:title="@string/reset_all"
+				android:positiveButtonText="@string/yes"
+				android:negativeButtonText="@string/no"
+				android:dialogTitle="@string/reset_all"
+				android:dialogMessage="@string/reset_all_question"
+				android:summary="@string/reset_all_summ" />
 		</PreferenceCategory>
 	</PreferenceScreen>
 	<PreferenceScreen android:title="@string/pref_cat_navigation">
@@ -376,6 +384,20 @@
 				android:summary="@string/zoom_summ"
 				android:key="zoom"/>
 		</PreferenceCategory>
+		<PreferenceCategory android:title="@string/pref_cat_scrolling">
+			<CheckBoxPreference
+				android:id="@+id/scrolling_buttons_checkbox"
+				android:title="@string/more_scrolling_buttons"
+				android:defaultValue="false"
+				android:summary="@string/more_scrolling_buttons_summ"
+				android:key="scrolling_buttons"/>
+			<CheckBoxPreference
+			    android:id="@+id/double_scrolling_checkbox"
+				android:title="@string/double_scrolling_gap"
+				android:defaultValue="false"
+				android:summary="@string/double_scrolling_gap_summ"
+				android:key="double_scrolling"/>
+		</PreferenceCategory>
 		<PreferenceCategory android:title="@string/pref_cat_zeemote">
 			<CheckBoxPreference
 				android:id="@+id/zeemote_checkbox"
@@ -452,19 +474,17 @@
 				android:summary="@string/default_font_summ"
 				android:key="defaultFont"
 				android:defaultValue=""/>
-                        <CheckBoxPreference
-                               android:title="@string/timeout_answer_text"
-                               android:summary="@string/timeout_answer_summ"
-                               android:defaultValue="false"
-                               android:disableDependentsState="false"
-                               android:key="timeoutAnswer"/>
-                       <com.hlidskialf.android.preference.SeekBarPreference
-                               android:dependency="timeoutAnswer"
-                               android:summary="@string/timeout_answer_seconds"
-                               android:max="30"
-                               android:title="@string/timeout_answer_seconds"
-                               android:defaultValue="6"
-                               android:key="timeoutAnswerSeconds"/>
+			<CheckBoxPreference android:title="@string/timeout_answer_text"
+				android:summary="@string/timeout_answer_summ" android:defaultValue="false"
+				android:disableDependentsState="false" android:key="timeoutAnswer" />
+			<com.hlidskialf.android.preference.SeekBarPreference
+				android:summary="@string/timeout_answer_seconds" android:dependency="timeoutAnswer"
+				android:key="timeoutAnswerSeconds" android:defaultValue="6"
+				android:title="@string/timeout_answer_seconds" android:max="30" />
+			<com.hlidskialf.android.preference.SeekBarPreference
+				android:summary="@string/timeout_question_seconds" android:dependency="timeoutAnswer"
+				android:key="timeoutQuestionSeconds" android:defaultValue="60" 
+				android:title="@string/timeout_question_seconds" android:max="60" />
 		</PreferenceCategory>
 	</PreferenceScreen>
 </PreferenceScreen>
