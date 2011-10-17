@@ -27,6 +27,7 @@ import android.database.sqlite.SQLiteStatement;
 import android.util.Log;
 
 import com.ichi2.anki.Fact.Field;
+import com.ichi2.anki.Utils.SqlCommandType;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -139,7 +140,7 @@ public class Deck {
     private String mLowPriority;
     private String mSuspended; // obsolete in libanki 1.1
 
-    // 0 is random, 1 is by input date, 2 is by input date inverse
+    // Can be NEW_CARDS_RANDOM, NEW_CARDS_OLD_FIRST or NEW_CARDS_NEW_FIRST, i.e. random, by input date or by input date inverse. Should be an enum.
     private int mNewCardOrder;
 
     // When to show new cards
@@ -235,9 +236,10 @@ public class Deck {
     public static synchronized Deck openDeck(String path) throws SQLException {
         return openDeck(path, true);
     }
-
-
     public static synchronized Deck openDeck(String path, boolean rebuild) throws SQLException {
+    	return openDeck(path, rebuild, false);
+    }
+    public static synchronized Deck openDeck(String path, boolean rebuild, boolean forceDeleteJournalMode) throws SQLException {
         Deck deck = null;
         
         //Cursor cursor = null;
@@ -246,7 +248,7 @@ public class Deck {
         Log.i(AnkiDroidApp.TAG, "openDeck - Opening database " + path);
         
         try {
-            //AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(path);
+            //AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(path, forceDeleteJournalMode);
             File dbFile = new File(path);
             SqlJetDb ankiDB = SqlJetDb.open(dbFile, true);
             // db.getOptions().setAutovacuum(true);
@@ -1220,6 +1222,20 @@ public class Deck {
     	}
     }
 
+    public double getSessionProgress() {
+    	int done = mDailyStats.getYesReps();
+    	int total = done + mFailedSoonCount + mRevCount + mNewCountToday;
+    	if (hasFinishScheduler()) {
+    		return 1.0d;
+    	} else {
+    		return (double) done / total;    		
+    	}
+    }
+
+    public int getSessionFinishedCards() {
+    	//TODO: add failedTomorrowCount and leeches
+    	return mDailyStats.getYesReps();
+    }
 
     public int getETA() {
     	if (mDailyStats.getReps() >= 10 && mDailyStats.getAverageTime() > 0) {
@@ -1739,11 +1755,6 @@ public class Deck {
     }
 
 
-    private void removeSpaced(LinkedList<QueueItem> queue) {
-        removeSpaced(queue, false);
-    }
-
-
     private void removeSpaced(LinkedList<QueueItem> queue, boolean _new) {
         ArrayList<Long> popped = new ArrayList<Long>();
         double delay = 0.0;
@@ -2258,36 +2269,6 @@ public class Deck {
         values.put("revCardOrder", mRevCardOrder);
 
         getDB().update(this, "decks", values, "id = " + mId, null);
-    }
-
-
-    public static double getLastModified(String deckPath) {
-        double value;
-        Cursor cursor = null;
-        // Log.i(AnkiDroidApp.TAG, "Deck - getLastModified from deck = " + deckPath);
-
-        boolean dbAlreadyOpened = AnkiDatabaseManager.isDatabaseOpen(deckPath);
-
-        try {
-            cursor = AnkiDatabaseManager.getDatabase(deckPath).getDatabase().rawQuery(
-                    "SELECT modified" + " FROM decks" + " LIMIT 1", null);
-
-            if (!cursor.moveToFirst()) {
-                value = -1;
-            } else {
-                value = cursor.getDouble(0);
-            }
-        } finally {
-            if (cursor != null && !cursor.isClosed()) {
-                cursor.close();
-            }
-        }
-
-        if (!dbAlreadyOpened) {
-            AnkiDatabaseManager.closeDatabase(deckPath);
-        }
-
-        return value;
     }
 
 
@@ -3017,6 +2998,9 @@ public class Deck {
         int fmax = 0;
         if (hasKey("leechFails")) {
             fmax = getInt("leechFails");
+            if (fmax == 0) {
+            	return false;
+            }
         } else {
             // No leech threshold found in DeckVars
             return false;
@@ -3048,8 +3032,11 @@ public class Deck {
         updateFactTags(new long[] { scard.getFact().getId() });
         card.setLeechFlag(true);
         if (getBool("suspendLeeches")) {
-            suspendCards(new long[] { card.getId() });
-            card.setSuspendedFlag(true);
+        	String undoName = UNDO_TYPE_SUSPEND_CARD;
+        	setUndoStart(undoName);
+        	suspendCards(new long[] { card.getId() });
+        	card.setSuspendedFlag(true);
+        	setUndoEnd(undoName);
         }
         reset();
     }
@@ -3189,15 +3176,20 @@ public class Deck {
 
 
     private String[] allTags_(String where) {
-        ArrayList<String> t = new ArrayList<String>();
-        t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM facts " + where, 0));
-        t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM models", 0));
-        t.addAll(getDB().queryColumn(String.class, "SELECT name FROM cardModels", 0));
-        String joined = Utils.joinTags(t);
-        String[] parsed = Utils.parseTags(joined);
-        List<String> joinedList = Arrays.asList(parsed);
-        TreeSet<String> joinedSet = new TreeSet<String>(joinedList);
-        return joinedSet.toArray(new String[joinedSet.size()]);
+    	try {
+            ArrayList<String> t = new ArrayList<String>();
+            t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM facts " + where, 0));
+            t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM models", 0));
+            t.addAll(getDB().queryColumn(String.class, "SELECT name FROM cardModels", 0));
+            String joined = Utils.joinTags(t);
+            String[] parsed = Utils.parseTags(joined);
+            List<String> joinedList = Arrays.asList(parsed);
+            TreeSet<String> joinedSet = new TreeSet<String>(joinedList);
+            return joinedSet.toArray(new String[joinedSet.size()]);
+    	} catch (OutOfMemoryError e) {
+    		Log.e(AnkiDroidApp.TAG, "OutOfMemoryError on retrieving allTags: " + e);
+    		return null;
+    	}
     }
 
 
@@ -3207,13 +3199,18 @@ public class Deck {
 
 
     public String[] allUserTags(String where) {
-        ArrayList<String> t = new ArrayList<String>();
-        t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM facts " + where, 0));
-        String joined = Utils.joinTags(t);
-        String[] parsed = Utils.parseTags(joined);
-        List<String> joinedList = Arrays.asList(parsed);
-        TreeSet<String> joinedSet = new TreeSet<String>(joinedList);
-        return joinedSet.toArray(new String[joinedSet.size()]);
+    	try {
+    		ArrayList<String> t = new ArrayList<String>();
+            t.addAll(getDB().queryColumn(String.class, "SELECT tags FROM facts " + where, 0));
+            String joined = Utils.joinTags(t);
+            String[] parsed = Utils.parseTags(joined);
+            List<String> joinedList = Arrays.asList(parsed);
+            TreeSet<String> joinedSet = new TreeSet<String>(joinedList);
+            return joinedSet.toArray(new String[joinedSet.size()]);
+    	} catch (OutOfMemoryError e) {
+    		Log.e(AnkiDroidApp.TAG, "OutOfMemoryError on retrieving allTags: " + e);
+    		return null;
+    	}
     }
 
 
@@ -3238,7 +3235,10 @@ public class Deck {
         if (cardIds == null) {
             getDB().getDatabase().execSQL("DELETE FROM cardTags");
             getDB().getDatabase().execSQL("DELETE FROM tags");
-            tagIds = tagIds(allTags_());
+            String[] allTags = allTags_();
+            if (allTags != null) {
+                tagIds = tagIds(allTags);
+            }
             cardsWithTags = splitTagsList();
         } else {
             Log.i(AnkiDroidApp.TAG, "updateCardTags cardIds: " + Arrays.toString(cardIds));
@@ -3246,7 +3246,10 @@ public class Deck {
             String factIds = Utils.ids2str(Utils.toPrimitive(getDB().queryColumn(Long.class,
                     "SELECT factId FROM cards WHERE id IN " + Utils.ids2str(cardIds), 0)));
             Log.i(AnkiDroidApp.TAG, "updateCardTags factIds: " + factIds);
-            tagIds = tagIds(allTags_("WHERE id IN " + factIds));
+            String[] allTags = allTags_("WHERE id IN " + factIds);
+            if (allTags != null) {
+                tagIds = tagIds(allTags);
+            }
             Log.i(AnkiDroidApp.TAG, "updateCardTags tagIds keys: " + Arrays.toString(tagIds.keySet().toArray(new String[tagIds.size()])));
             Log.i(AnkiDroidApp.TAG, "updateCardTags tagIds values: " + Arrays.toString(tagIds.values().toArray(new Long[tagIds.size()])));
             cardsWithTags = splitTagsList("AND facts.id IN " + factIds);
@@ -3286,43 +3289,41 @@ public class Deck {
     }
 
 
-    public ArrayList<String[]> getAllCards(String order) {
-    	ArrayList<String[]> allCards = new ArrayList<String[]>();
+    public ArrayList<HashMap<String, String>> getCards(int chunk, String startId) {
+    	ArrayList<HashMap<String, String>> cards = new ArrayList<HashMap<String, String>>();
 
         Cursor cur = null;
         try {
         	cur = getDB().getDatabase().rawQuery("SELECT cards.id, cards.question, cards.answer, " +
-        			"facts.tags, models.tags, cardModels.name, cards.priority FROM cards, facts, " +
+        			"facts.tags, models.tags, cardModels.name, cards.priority, cards.due, cards.interval, " +
+        			"cards.factor, cards.created FROM cards, facts, " +
         			"models, cardModels WHERE cards.factId == facts.id AND facts.modelId == models.id " +
-        			"AND cards.cardModelId = cardModels.id ORDER BY " + order, null);
+        			"AND cards.cardModelId = cardModels.id " + (startId != "" ? ("AND cards.id > " + startId) : "") +
+        			" ORDER BY cards.id LIMIT " + chunk, null);
             while (cur.moveToNext()) {
-            	String[] data = new String[5];
-            	data[0] = Long.toString(cur.getLong(0));
-                String string = Utils.stripHTML(cur.getString(1));
-            	if (string.length() < 55) {
-                    data[1] = string;
-            	} else {
-                    data[1] = string.substring(0, 55) + "...";                   
-            	}
-            	string = Utils.stripHTML(cur.getString(2));
-                if (string.length() < 55) {
-                    data[2] = string;
-                } else {
-                    data[2] = string.substring(0, 55) + "...";                   
-                }
+            	HashMap<String, String> data = new HashMap<String, String>();
+            	data.put("id", Long.toString(cur.getLong(0)));
+            	data.put("question", Utils.stripHTML(cur.getString(1).replaceAll("<br(\\s*\\/*)>","\n")));
+            	data.put("answer", Utils.stripHTML(cur.getString(2).replaceAll("<br(\\s*\\/*)>","\n")));
             	String tags = cur.getString(3);
+            	String flags = null;
            	    if (tags.contains(TAG_MARKED)) {
-           	        data[3] = "1";
+           	    	flags = "1";
            	    } else {
-           	        data[3] = "0";
+           	    	flags = "0";
            	    }
-           	    data[4] = tags + " " + cur.getString(4) + " " + cur.getString(5);
             	if (cur.getString(6).equals("-3")) {
-                    data[3] = data[3] + "1";
+            		flags = flags + "1";
                 } else {
-                    data[3] = data[3] + "0";
+                	flags = flags + "0";
                 }
-            	allCards.add(data);
+            	data.put("tags", tags + " " + cur.getString(4) + " " + cur.getString(5));
+            	data.put("flags", flags);
+            	data.put("due", Double.toString(cur.getDouble(6)));
+            	data.put("interval", Double.toString(cur.getDouble(7)));
+            	data.put("factor", Double.toString(cur.getDouble(8)));
+            	data.put("created", Double.toString(cur.getDouble(9)));
+            	cards.add(data);
             }
         } catch (SQLException e) {
             Log.e(AnkiDroidApp.TAG, "getAllCards: " + e.toString());
@@ -3332,7 +3333,7 @@ public class Deck {
                 cur.close();
             }
         }
-    	return allCards;
+    	return cards;
     }
 
 
@@ -3687,11 +3688,6 @@ public class Deck {
     }
 
 
-    private void updatePriorities(long[] cardIds, String[] suspend) {
-        updatePriorities(cardIds, suspend, true);
-    }
-
-
     void updatePriorities(long[] cardIds, String[] suspend, boolean dirty) {
         Cursor cursor = null;
         Log.i(AnkiDroidApp.TAG, "updatePriorities - Updating priorities...");
@@ -3914,6 +3910,39 @@ public class Deck {
     }
 
 
+    public boolean importFact(Fact fact, CardModel cardModel) {
+        double now = Utils.now();
+        // add fact to fact table
+        ContentValues values = new ContentValues();
+        values.put("id", fact.getId());
+        values.put("modelId", fact.getModelId());
+        values.put("created", now);
+        values.put("modified", now);
+        values.put("tags", "");
+        values.put("spaceUntil", 0);
+        getDB().insert(this, "facts", null, values);
+
+        // add fields to fields table
+        for (Field f : fact.getFields()) {
+            values.clear();
+            values.put("value", f.getValue());
+            values.put("id", f.getId());
+            values.put("factId", f.getFactId());
+            values.put("fieldModelId", f.getFieldModelId());
+            values.put("ordinal", f.getOrdinal());
+            getDB().insert(this, "fields", null, values);
+        }
+
+        Card newCard = new Card(this, fact, cardModel, Utils.now());
+        HashMap<String, String> newQA = CardModel.formatQA(fact, newCard.getCardModel(), newCard.splitTags());
+        newCard.setQuestion(newQA.get("question"));
+        newCard.setAnswer(newQA.get("answer"));
+        newCard.addToDb();            
+
+        return true;
+    }
+
+
     /**
      * Bulk delete facts by ID. Don't touch cards, assume any cards have already been removed. Caller must .reset().
      *
@@ -4096,6 +4125,7 @@ public class Deck {
     }
 
 
+    /*
     // CSS for all the fields
     private String rebuildCSS() {
         StringBuilder css = new StringBuilder(512);
@@ -4189,6 +4219,7 @@ public class Deck {
         }
         setVar("hexCache", jsonObject.toString(), false);
     }
+    */
 
     //
     // Syncing
@@ -4246,12 +4277,12 @@ public class Deck {
 
 
     private class UndoCommand {
-        private String mCommand;
+        private SqlCommandType mCommand;
         private String mTable;
         private ContentValues mValues;
         private String mWhereClause;
 
-        UndoCommand(String command, String table, ContentValues values, String whereClause) {
+        UndoCommand(SqlCommandType command, String table, ContentValues values, String whereClause) {
         	mCommand = command;
         	mTable = table;
         	mValues = values;
@@ -4293,11 +4324,14 @@ public class Deck {
     }
 
 
+    //XXX: this method has never been used.
+    /*
     private void setUndoBarrier() {
         if (mUndoStack.isEmpty() || mUndoStack.peek() != null) {
             mUndoStack.push(null);
         }
     }
+    */
 
 
     public void setUndoStart(String name) {
@@ -4331,7 +4365,7 @@ public class Deck {
         if (mUndoStack.size() > 20) {
         	mUndoStack.removeElementAt(0);
         }
-        mUndoRedoStackToRecord = mUndoStack;
+        startRecordingUndoInfo(mUndoStack);
     }
 
 
@@ -4348,16 +4382,23 @@ public class Deck {
         } else {
             mRedoStack.clear();
         }
-        mUndoRedoStackToRecord = null;
+        stopRecordingUndoInfo();
     }
 
+    private void startRecordingUndoInfo(Stack<UndoRow> dst) {
+        mUndoRedoStackToRecord = dst;
+    }
+
+    private void stopRecordingUndoInfo() {
+        mUndoRedoStackToRecord = null;
+    }
 
     public boolean recordUndoInformation() {
     	return mUndoEnabled && (mUndoRedoStackToRecord != null);
     }
 
 
-    public void addUndoCommand(String command, String table, ContentValues values, String whereClause) {
+    public void addUndoCommand(SqlCommandType command, String table, ContentValues values, String whereClause) {
     	mUndoRedoStackToRecord.peek().mUndoCommands.add(new UndoCommand(command, table, values, whereClause));
     }
 
@@ -4375,7 +4416,7 @@ public class Deck {
         } else {
            dst.push(new UndoRow(row.mName, oldCardId));
         }
-        mUndoRedoStackToRecord = dst;
+        startRecordingUndoInfo(dst);
         getDB().getDatabase().beginTransaction();
         try {
             for (UndoCommand u : row.mUndoCommands) {
@@ -4383,7 +4424,7 @@ public class Deck {
             }
             getDB().getDatabase().setTransactionSuccessful();
         } finally {
-        	mUndoRedoStackToRecord = null;
+        	stopRecordingUndoInfo();
         	getDB().getDatabase().endTransaction();
         }
         if (row.mUndoCommands.size() == 0) {
@@ -4392,7 +4433,6 @@ public class Deck {
         mCurrentUndoRedoType = row.mName;
         return row.mCardId;
     }
-
 
     /**
      * Undo the last action(s). Caller must .reset()
@@ -4500,7 +4540,7 @@ public class Deck {
             bundledDeck.put("cardCount", mCardCount);
             bundledDeck.put("collapseTime", mCollapseTime);
             bundledDeck.put("created", mCreated);
-            // bundledDeck.put("currentModelId", currentModelId);
+            // bundledDeck.put("currentModelId", mCurrentModelId); //XXX: Why? I believe this should is sent by AnkiDesktop.
             bundledDeck.put("delay0", mDelay0);
             bundledDeck.put("delay1", mDelay1);
             bundledDeck.put("delay2", mDelay2);
@@ -4523,13 +4563,18 @@ public class Deck {
             bundledDeck.put("midIntervalMin", mMidIntervalMin);
             bundledDeck.put("modified", mModified);
             bundledDeck.put("newCardModulus", mNewCardModulus);
+            bundledDeck.put("newCardSpacing", mNewCardSpacing);
+            bundledDeck.put("newCardOrder", mNewCardOrder);
+            bundledDeck.put("newCardsPerDay", mNewCardsPerDay);
+            bundledDeck.put("sessionTimeLimit", mSessionTimeLimit);
+            bundledDeck.put("sessionRepLimit", mSessionRepLimit);
             bundledDeck.put("newCount", mNewCount);
             bundledDeck.put("newCountToday", mNewCountToday);
             bundledDeck.put("newEarly", mNewEarly);
             bundledDeck.put("revCount", mRevCount);
             bundledDeck.put("reviewEarly", mReviewEarly);
             bundledDeck.put("suspended", mSuspended);
-            bundledDeck.put("undoEnabled", mUndoEnabled);
+            bundledDeck.put("undoEnabled", mUndoEnabled); //XXX: this is synced in Anki 1.2.8, but I believe it should not be, as it's useless.
             bundledDeck.put("utcOffset", mUtcOffset);
         } catch (JSONException e) {
             Log.i(AnkiDroidApp.TAG, "JSONException = " + e.getMessage());
@@ -4590,7 +4635,7 @@ public class Deck {
             mSessionTimeLimit = deckPayload.getInt("sessionTimeLimit");
             mSuspended = deckPayload.getString("suspended");
             // tmpMediaDir
-            mUndoEnabled = deckPayload.getBoolean("undoEnabled");
+            //mUndoEnabled = deckPayload.getBoolean("undoEnabled"); //XXX: this is synced in Anki 1.2.8, but it should not be... it causes a bug!
             mUtcOffset = deckPayload.getDouble("utcOffset");
 
             commitToDB();
@@ -4646,7 +4691,7 @@ public class Deck {
 
         if (create) {
             for (String tag : tags) {
-                getDB().getDatabase().execSQL("INSERT OR IGNORE INTO tags (tag) VALUES ('" + tag + "')");
+                getDB().getDatabase().execSQL("INSERT OR IGNORE INTO tags (tag) VALUES ('" + tag.replace("'", "''") + "')");
             }
         }
         if (tags.length != 0) {
@@ -4698,5 +4743,94 @@ public class Deck {
 
         // Set the UTC offset.
         db.getDatabase().execSQL("UPDATE decks SET utcOffset=" + Utils.utcOffset());
+
+        // Set correct creation time
+        db.getDatabase().execSQL("UPDATE decks SET created = " + Utils.now());
     }
+
+
+    public ContentValues getDeckSummary() {
+    	ContentValues values = new ContentValues();
+
+    	values.put("cardCount", (int)getDB().queryScalar("SELECT count(*) FROM cards"));
+    	values.put("factCount", (int)getDB().queryScalar("SELECT count(*) FROM facts"));
+    	values.put("matureCount", (int)getDB().queryScalar("SELECT count(*) FROM cards WHERE interval >= 21"));
+    	values.put("unseenCount", (int)getDB().queryScalar("SELECT count(*) FROM cards WHERE reps = 0"));
+        Cursor cursor = null;
+        try {
+            cursor = getDB().getDatabase().rawQuery("SELECT sum(interval) FROM cards WHERE reps > 0", null);
+            if (cursor.moveToFirst()) {
+            	values.put("intervalSum", (int)cursor.getLong(0));            	
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    	values.put("repsMatCount", (int)getDB().queryScalar("SELECT (matureEase1 + matureEase2 + matureEase3 + matureEase4) FROM stats WHERE type = 0"));
+    	values.put("repsMatNoCount", (int)getDB().queryScalar("SELECT (matureEase1) FROM stats WHERE type = 0"));
+    	values.put("repsYoungCount", (int)getDB().queryScalar("SELECT (youngEase1 + youngEase2 + youngEase3 + youngEase4) FROM stats WHERE type = 0"));
+    	values.put("repsYoungNoCount", (int)getDB().queryScalar("SELECT (youngEase1) FROM stats WHERE type = 0"));
+    	values.put("repsFirstCount", (int)getDB().queryScalar("SELECT (newEase1 + newEase2 + newEase3 + newEase4) FROM stats WHERE type = 0"));
+    	values.put("repsFirstNoCount", (int)getDB().queryScalar("SELECT (newEase1) FROM stats WHERE type = 0"));
+
+        Date value = Utils.genToday(getUtcOffset() + (86400 * 7));
+    	values.put("reviewsLastWeek", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(youngEase1 + youngEase2 + youngEase3 + youngEase4 + matureEase1 + matureEase2 + matureEase3 + matureEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+    	values.put("newsLastWeek", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(newEase1 + newEase2 + newEase3 + newEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+        value = Utils.genToday(getUtcOffset() + (86400 * 30));
+    	values.put("reviewsLastMonth", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(youngEase1 + youngEase2 + youngEase3 + youngEase4 + matureEase1 + matureEase2 + matureEase3 + matureEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+    	values.put("newsLastMonth", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(newEase1 + newEase2 + newEase3 + newEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+        value = Utils.genToday(getUtcOffset() + (86400 * 365));
+    	values.put("reviewsLastYear", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(youngEase1 + youngEase2 + youngEase3 + youngEase4 + matureEase1 + matureEase2 + matureEase3 + matureEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+    	values.put("newsLastYear", (int)getDB().queryScalar(String.format(Utils.ENGLISH_LOCALE,
+        		"SELECT sum(newEase1 + newEase2 + newEase3 + newEase4) FROM stats WHERE day > \'%tF\' AND type = %d", value, Stats.STATS_DAY)));
+        Float created = 0.0f;
+    	try {
+            cursor = getDB().getDatabase().rawQuery("SELECT created FROM decks", null);
+            if (cursor.moveToFirst()) {
+            	created = cursor.getFloat(0);
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    	values.put("deckAge", (int)((Utils.now() - created) / 86400));
+    	int failedCards = getFailedDelayedCount() + getFailedSoonCount();
+        int revCards = getNextDueCards(1) + getNextDueCards(0);
+        int newCards = Math.min(mNewCardsPerDay, (int)getDB().queryScalar("SELECT count(*) FROM cards WHERE reps = 0 AND type >= 0"));
+        int eta = getETA(failedCards, revCards, newCards, true);
+        values.put("revTomorrow", (int)(failedCards + revCards));
+        values.put("newTomorrow", (int)newCards);
+        values.put("timeTomorrow", (int)eta);
+        return values;
+    }
+
+
+    public static boolean isWalEnabled(String deckPath) {
+        Cursor cursor = null;
+        boolean value = false;
+        boolean dbAlreadyOpened = AnkiDatabaseManager.isDatabaseOpen(deckPath);
+        try {
+            cursor = AnkiDatabaseManager.getDatabase(deckPath).getDatabase().rawQuery(
+            		"PRAGMA journal_mode", null);
+        	if (cursor.moveToFirst()) {
+        		value = cursor.getString(0).equalsIgnoreCase("wal");
+        	}
+        } finally {
+            if (cursor != null && !cursor.isClosed()) {
+                cursor.close();
+            }
+        }
+        if (!dbAlreadyOpened) {
+            AnkiDatabaseManager.closeDatabase(deckPath);
+        }
+        return value;
+    }
+
 }

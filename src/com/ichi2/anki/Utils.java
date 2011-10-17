@@ -60,6 +60,7 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Date;
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -80,6 +81,7 @@ import java.util.zip.Deflater;
  * TODO comments
  */
 public class Utils {
+    enum SqlCommandType { SQL_INS, SQL_UPD, SQL_DEL };
 
     // Used to format doubles with English's decimal separator system
     public static final Locale ENGLISH_LOCALE = new Locale("en_US");
@@ -88,9 +90,22 @@ public class Utils {
 
     private static final int DAYS_BEFORE_1970 = 719163;
 
+    private static NumberFormat mCurrentNumberFormat;
+    private static NumberFormat mCurrentPercentageFormat;
+
     private static TreeSet<Long> sIdTree;
     private static long sIdTime;
 
+    private static final int TIME_SECONDS = 0;
+    private static final int TIME_MINUTES = 1;
+    private static final int TIME_HOURS = 2;
+    private static final int TIME_DAYS = 3;
+    private static final int TIME_MONTHS = 4;
+    private static final int TIME_YEARS = 5;
+
+    public static final int TIME_FORMAT_DEFAULT = 0;
+    public static final int TIME_FORMAT_IN = 1;
+    public static final int TIME_FORMAT_BEFORE = 2;
 
     /* Prevent class from being instantiated */
     private Utils() { }
@@ -101,7 +116,149 @@ public class Utils {
     private static final Pattern scriptPattern = Pattern.compile("(?s)<script.*?>.*?</script>");
     private static final Pattern tagPattern = Pattern.compile("<.*?>");
     private static final Pattern htmlEntitiesPattern = Pattern.compile("&#?\\w+;");
-    
+
+
+    /**
+     * Return a string representing a time span (eg '2 days').
+     * @param inFormat: if true, return eg 'in 2 days'
+     */
+    public static String fmtTimeSpan(double time, int format) {
+    	return fmtTimeSpan(time, format, false);
+    }
+    public static String fmtTimeSpan(double time, int format, boolean boldNumber) {
+    	int type;
+    	int unit = 99;
+    	int point = 0;
+    	if (Math.abs(time) < 60 || unit < 1) {
+    		type = TIME_SECONDS;
+    	} else if (Math.abs(time) < 3599 || unit < 2) {
+    		type = TIME_MINUTES;
+    	} else if (Math.abs(time) < 60 * 60 * 24 || unit < 3) {
+    		type = TIME_HOURS;
+    	} else if (Math.abs(time) < 60 * 60 * 24 * 29.5 || unit < 4) {
+    		type = TIME_DAYS;
+    	} else if (Math.abs(time) < 60 * 60 * 24 * 30 * 11.95 || unit < 5) {
+    		type = TIME_MONTHS;
+    		point = 1;
+    	} else {
+    		type = TIME_YEARS;
+    		point = 1;
+    	}
+    	time = convertSecondsTo(time, type);
+
+    	int formatId;
+    	switch (format) {
+    	case TIME_FORMAT_IN:
+    		if (Math.round(time * 10) == 10) {
+    			formatId = R.array.next_review_in_s;
+    		} else {
+    			formatId = R.array.next_review_in_p;    			
+    		}
+    		break;
+    	case TIME_FORMAT_BEFORE:
+    		if (Math.round(time * 10) == 10) {
+    			formatId = R.array.next_review_before_s;
+    		} else {
+    			formatId = R.array.next_review_before_p;    			
+    		}
+    		break;
+    	case TIME_FORMAT_DEFAULT:
+    	default:
+    		if (Math.round(time * 10) == 10) {
+    			formatId = R.array.next_review_s;
+    		} else {
+    			formatId = R.array.next_review_p;    			
+    		}
+    		break;
+    	}
+
+    	String timeString = String.format(AnkiDroidApp.getAppResources().getStringArray(formatId)[type], boldNumber ? "<b>" + fmtDouble(time, point) + "</b>" : fmtDouble(time, point));
+		if (boldNumber && time == 1) {
+			timeString = timeString.replace("1", "<b>1</b>");
+		}
+		return timeString;
+    }
+
+
+    private static double convertSecondsTo(double seconds, int type) {
+    	switch (type) {
+    	case TIME_SECONDS:
+    		return seconds;
+    	case TIME_MINUTES:
+    		return seconds / 60.0;
+    	case TIME_HOURS:
+    		return seconds / 3600.0;    		
+    	case TIME_DAYS:
+    		return seconds / 86400.0;    		
+    	case TIME_MONTHS:
+    		return seconds / 2592000.0;    		
+    	case TIME_YEARS:
+    		return seconds / 31536000.0;
+		default:
+    		return 0;
+    	}
+    }
+
+
+    /**
+     * Locale
+     * ***********************************************************************************************
+     */
+
+    /**
+     * @return double with percentage sign
+     */
+    public static String fmtPercentage(Double value) {
+	return fmtPercentage(value, 0);
+    }
+    public static String fmtPercentage(Double value, int point) {
+    	// only retrieve the percentage format the first time
+    	if (mCurrentPercentageFormat == null) {
+    		mCurrentPercentageFormat = NumberFormat.getPercentInstance(Locale.getDefault());
+    	}
+    	mCurrentNumberFormat.setMaximumFractionDigits(point);
+    	return mCurrentPercentageFormat.format(value);
+    }
+
+
+    /**
+     * @return double with percentage sign
+     */
+    public static boolean isNewDay(long millies) {
+		Calendar cal = Calendar.getInstance();
+		if (cal.get(Calendar.HOUR_OF_DAY) < StudyOptions.mNewDayStartsAt) {
+            cal.add(Calendar.HOUR_OF_DAY, -cal.get(Calendar.HOUR_OF_DAY) - 24 + StudyOptions.mNewDayStartsAt);
+		} else {
+            cal.add(Calendar.HOUR_OF_DAY, -cal.get(Calendar.HOUR_OF_DAY) + StudyOptions.mNewDayStartsAt);
+		}
+        cal.add(Calendar.MINUTE, -cal.get(Calendar.MINUTE));
+        cal.add(Calendar.SECOND, -cal.get(Calendar.SECOND));
+        if (cal.getTimeInMillis() > millies) {
+        	return true;
+        } else {
+        	return false;
+        }
+	
+
+    }
+
+
+    /**
+     * @return a string with decimal separator according to current locale
+     */
+    public static String fmtDouble(Double value) {
+    	return fmtDouble(value, 1);
+    }
+    public static String fmtDouble(Double value, int point) {
+    	// only retrieve the number format the first time
+    	if (mCurrentNumberFormat == null) {
+    		mCurrentNumberFormat = NumberFormat.getInstance(Locale.getDefault());
+    	}
+    	mCurrentNumberFormat.setMaximumFractionDigits(point);
+    	return mCurrentNumberFormat.format(value);
+    }
+
+
     public static long genID() {
         long time = System.currentTimeMillis();
         long id;
@@ -350,32 +507,37 @@ public class Utils {
         if (endTimeMillis != startTimeMillis) {
             speedKbSec = sizeKb * 1000 / (endTimeMillis - startTimeMillis);
         }
-        Log.d(AnkiDroidApp.TAG, "Utils.writeToFile: "
-            + "Size: " + sizeKb + "Kb, "
-            + "Duration: " + durationSeconds + "s, "
-            + "Speed: " + speedKbSec + "Kb/s");
+        Log.d(AnkiDroidApp.TAG, "Utils.writeToFile: " + "Size: " + sizeKb + "Kb, " + "Duration: " + durationSeconds + "s, " + "Speed: " + speedKbSec + "Kb/s");
         output.close();
     }
 
 
     // Print methods
     public static void printJSONObject(JSONObject jsonObject) {
-        printJSONObject(jsonObject, "-", false);
+        printJSONObject(jsonObject, "-", null);
     }
 
 
     public static void printJSONObject(JSONObject jsonObject, boolean writeToFile) {
-        if (writeToFile) {
-            new File("/sdcard/payloadAndroid.txt").delete();
+        BufferedWriter buff;
+        try {
+            buff = writeToFile ?  
+                    new BufferedWriter(new FileWriter("/sdcard/payloadAndroid.txt"), 8192) : null;
+            try {
+                printJSONObject(jsonObject, "-", buff);
+            } finally {
+                if (buff != null)
+                    buff.close();
+            }
+        } catch (IOException ioe) {
+            Log.e(AnkiDroidApp.TAG, "IOException = " + ioe.getMessage());
         }
-        printJSONObject(jsonObject, "-", writeToFile);
     }
 
 
-    public static void printJSONObject(JSONObject jsonObject, String indentation, boolean writeToFile) {
+    private static void printJSONObject(JSONObject jsonObject, String indentation, BufferedWriter buff) {
         try {
-
-            Iterator<String> keys = jsonObject.keys();
+            @SuppressWarnings("unchecked") Iterator<String> keys = (Iterator<String>) jsonObject.keys();
             TreeSet<String> orderedKeysSet = new TreeSet<String>();
             while (keys.hasNext()) {
                 orderedKeysSet.add(keys.next());
@@ -388,20 +550,16 @@ public class Utils {
                 try {
                     Object value = jsonObject.get(key);
                     if (value instanceof JSONObject) {
-                        if (writeToFile) {
-                            BufferedWriter buff = new BufferedWriter(new FileWriter("/sdcard/payloadAndroid.txt", true));
+                        if (buff != null) {
                             buff.write(indentation + " " + key + " : ");
                             buff.newLine();
-                            buff.close();
                         }
                         Log.i(AnkiDroidApp.TAG, "	" + indentation + key + " : ");
-                        printJSONObject((JSONObject) value, indentation + "-", writeToFile);
+                        printJSONObject((JSONObject) value, indentation + "-", buff);
                     } else {
-                        if (writeToFile) {
-                            BufferedWriter buff = new BufferedWriter(new FileWriter("/sdcard/payloadAndroid.txt", true));
+                        if (buff != null) {
                             buff.write(indentation + " " + key + " = " + jsonObject.get(key).toString());
                             buff.newLine();
-                            buff.close();
                         }
                         Log.i(AnkiDroidApp.TAG, "	" + indentation + key + " = " + jsonObject.get(key).toString());
                     }
@@ -409,20 +567,20 @@ public class Utils {
                     Log.e(AnkiDroidApp.TAG, "JSONException = " + e.getMessage());
                 }
             }
-
         } catch (IOException e1) {
             Log.e(AnkiDroidApp.TAG, "IOException = " + e1.getMessage());
         }
-
     }
 
 
+    /*
     public static void saveJSONObject(JSONObject jsonObject) throws IOException {
         Log.i(AnkiDroidApp.TAG, "saveJSONObject");
         BufferedWriter buff = new BufferedWriter(new FileWriter("/sdcard/jsonObjectAndroid.txt", true));
         buff.write(jsonObject.toString());
         buff.close();
     }
+    */
 
 
     /**
@@ -444,57 +602,6 @@ public class Utils {
         return (System.currentTimeMillis() / 1000.0);
     }
 
-
-    public static String getReadableInterval(Context context, double numberOfDays) {
-    	return getReadableInterval(context, numberOfDays, false);
-    }
-
-
-    public static String getReadableInterval(Context context, double numberOfDays, boolean inFormat) {
-    	double adjustedInterval;
-    	int type;
-    	if (numberOfDays < 1) {
-    		// hours
-    		adjustedInterval = Math.max(1, Math.round(numberOfDays * 24));
-    		type = 0;
-    	} else if (numberOfDays < 30) {
-    		// days
-    		adjustedInterval = Math.round(numberOfDays);
-    		type = 1;
-    	} else if (numberOfDays < 360) {
-    		// months
-    		adjustedInterval = Math.round(numberOfDays / 3);
-    		adjustedInterval /= 10;
-    		type = 2;
-    	} else {
-    		// years
-    		adjustedInterval = Math.round(numberOfDays / 36.5);
-			adjustedInterval /= 10;
-    		type = 3;
-    	}
-   		if (!inFormat) {
-   	    	if (adjustedInterval == 1){
-   	       		return context.getResources().getStringArray(R.array.next_review_s)[type];
-   	       	} else {
-   	       		return String.format(context.getResources().getStringArray(R.array.next_review_p)[type], formatDouble(type, adjustedInterval));
-   	    	}   			
-   		} else {
-   	    	if (adjustedInterval == 1){
-   	       		return context.getResources().getStringArray(R.array.next_review_in_s)[type]; 			       			
-   	       	} else {
-   	       		return String.format(context.getResources().getStringArray(R.array.next_review_in_p)[type], formatDouble(type, adjustedInterval));
-   	    	}   			
-   		}
-    }
-
-
-    private static String formatDouble(int type, double adjustedInterval) {
-    	if (type == 0 || (adjustedInterval * 10) % 10 == 0){
-			return String.valueOf((int) adjustedInterval);        			   			
-    	} else {
-       		return String.valueOf(adjustedInterval); 	
-		}
-    }
 
     /**
      *  Returns the effective date of the present moment.
@@ -754,19 +861,24 @@ public class Utils {
 
 
     public static void updateProgressBars(Context context, View view, double progress, int maxX, int y, boolean singleBar) {
+    	updateProgressBars(context, view, progress, maxX, y, singleBar, true);
+    }
+	public static void updateProgressBars(Context context, View view, double progress, int maxX, int y, boolean singleBar, boolean changeColor) {
         if (view == null) {
             return;
         }
         if (singleBar) {
-            if (progress < 0.5) {
-                view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_1));
-            } else if (progress < 0.65) {
-                view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_2));
-            } else if (progress < 0.75) {
-                view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_3));
-            } else {
-                view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_4));            
-            }            
+        	if (changeColor) {
+                if (progress < 0.5) {
+                    view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_1));
+                } else if (progress < 0.65) {
+                    view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_2));
+                } else if (progress < 0.75) {
+                    view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_3));
+                } else {
+                    view.setBackgroundColor(context.getResources().getColor(R.color.progressbar_4));            
+                }        		
+        	}
             FrameLayout.LayoutParams lparam = new FrameLayout.LayoutParams(0, 0);            
             lparam.height = y;
             lparam.width = (int) (maxX * progress);

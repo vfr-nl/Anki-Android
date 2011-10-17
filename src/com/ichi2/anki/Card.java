@@ -530,6 +530,40 @@ public class Card {
     }
 
 
+    public void resetCard() {
+        Log.i(AnkiDroidApp.TAG, "Reset Card: " + mId);
+    	mModified = Utils.now();
+    	mPriority = PRIORITY_NORMAL;
+        mInterval = 0;
+        mLastInterval = 0;
+        mDue = Utils.now();
+        mLastDue = 0;
+        mFactor = Deck.INITIAL_FACTOR;
+        mLastFactor = Deck.INITIAL_FACTOR;
+        mFirstAnswered = 0;
+        mReps = 0;
+        mSuccessive = 0;
+        mAverageTime = 0;
+        mReviewTime = 0;
+        mYoungEase0 = 0;
+        mYoungEase1 = 0;
+        mYoungEase2 = 0;
+        mYoungEase3 = 0;
+        mYoungEase4 = 0;
+        mMatureEase0 = 0;
+        mMatureEase1 = 0;
+        mMatureEase2 = 0;
+        mMatureEase3 = 0;
+        mMatureEase4 = 0;
+        mYesCount = 0;
+        mNoCount = 0;
+        mRelativeDelay = 0;
+        mType = TYPE_NEW;
+        mCombinedDue = 0;
+        toDB();
+    }
+
+
     public boolean fromDB(long id) {
         Cursor cursor = null;
 
@@ -748,83 +782,100 @@ public class Card {
     }
 
 
-    public String getCardDetails(Context context) {
+    public String getCardDetails(Context context, boolean full) {
     	Resources res = context.getResources();
-        StringBuilder builder = new StringBuilder();
-        builder.append("<html><body text=\"#FFFFFF\"><table><colgroup><col span=\"1\" style=\"width: 40%;\"><col span=\"1\" style=\"width: 60%;\"></colgroup><tr><td>");
-        builder.append(res.getString(R.string.card_details_question));
-        builder.append("</td><td>");
-        builder.append(Utils.stripHTML(mQuestion));
-        builder.append("</td></tr><tr><td>");
-        builder.append(res.getString(R.string.card_details_answer));
-        builder.append("</td><td>");
-        builder.append(Utils.stripHTML(mAnswer));
-        builder.append("</td></tr><tr><td>");
-        builder.append(res.getString(R.string.card_details_due));
-        builder.append("</td><td>");
-        if (mYesCount + mNoCount == 0) {
-            builder.append("-");
-        } else if (mCombinedDue < mDeck.getDueCutoff()) {
-            builder.append(res.getString(R.string.card_details_now));
-        } else {
-            builder.append(Utils.getReadableInterval(context, (mCombinedDue - Utils.now()) / 86400.0, true));
+    	StringBuilder builder = new StringBuilder();
+       	builder.append("<html><body text=\"#FFFFFF\">");
+       	if (full) {
+            builder.append("<b>");
+            builder.append(res.getString(R.string.card_details_question));
+            builder.append("</b>: ");
+            builder.append(Utils.stripHTML(mQuestion));
+            builder.append("<br><b>");
+            builder.append(res.getString(R.string.card_details_answer));
+            builder.append("</b>: ");
+            builder.append(Utils.stripHTML(mAnswer));
+            builder.append("<br>");
+       	}
+        String[] userTags = mDeck.allUserTags("WHERE id = " + mFactId);
+        if (userTags != null) {
+            String tags = Arrays.toString(userTags);        	
+            builder.append("<b>");
+            builder.append(res.getString(R.string.card_details_tags));
+            builder.append("</b>: ");
+            builder.append(tags.substring(1, tags.length() - 1));
+            builder.append("<br><br>");
         }
-        builder.append("</td></tr><tr><td>");
+        if (full) {
+            builder.append(res.getString(R.string.card_details_due));
+            builder.append(": ");
+            if (mYesCount + mNoCount == 0) {
+                builder.append("-");
+            } else if (mCombinedDue < mDeck.getDueCutoff()) {
+                builder.append("<b>").append(res.getString(R.string.card_details_now)).append("</b>");
+            } else {
+                builder.append(Utils.fmtTimeSpan(mCombinedDue - Utils.now(), Utils.TIME_FORMAT_IN, true));
+            }
+            builder.append("<br>");        	
+        }
+        builder.append(res.getString(R.string.card_details_last_due));
+        builder.append(": ");
+        if (mYesCount + mNoCount == 0 || mLastDue == 0 || mInterval == 0) {
+            builder.append("-");
+        } else {
+        	builder.append(Utils.fmtTimeSpan(Utils.now() - mLastDue, Utils.TIME_FORMAT_BEFORE, true));
+        }
+        builder.append("<br>");
         builder.append(res.getString(R.string.card_details_interval));
-        builder.append("</td><td>");
+        builder.append(": ");
         if (mInterval == 0) {
             builder.append("-");
         } else {
-            builder.append(Utils.getReadableInterval(context, mInterval));
+            builder.append(Utils.fmtTimeSpan(mInterval * 86400, Utils.TIME_FORMAT_DEFAULT, true));
         }
-        builder.append("</td></tr><tr><td>");
+        builder.append("<br><br>");
         builder.append(res.getString(R.string.card_details_ease));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         double ease = Math.round(mFactor * 100);
         builder.append(ease / 100);
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br>");
         builder.append(res.getString(R.string.card_details_average_time));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         if (mYesCount + mNoCount == 0) {
             builder.append("-");
         } else {
             builder.append(Utils.doubleToTime(mAverageTime));
         }
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br>");
         builder.append(res.getString(R.string.card_details_total_time));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(Utils.doubleToTime(mReviewTime));
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br><br>");
         builder.append(res.getString(R.string.card_details_yes_count));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(mYesCount);
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br>");
         builder.append(res.getString(R.string.card_details_no_count));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(mNoCount);
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br><br>");
         builder.append(res.getString(R.string.card_details_added));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(DateFormat.getDateFormat(context).format((long) (mCreated - mDeck.getUtcOffset()) * 1000l));
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br>");
         builder.append(res.getString(R.string.card_details_changed));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(DateFormat.getDateFormat(context).format((long) (mModified - mDeck.getUtcOffset()) * 1000l));
-        builder.append("</td></tr><tr><td>");
-        builder.append(res.getString(R.string.card_details_tags));
-        builder.append("</td><td>");
-        String tags = Arrays.toString(mDeck.allUserTags("WHERE id = " + mFactId));
-        builder.append(tags.substring(1, tags.length() - 1));
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br><br>");
         builder.append(res.getString(R.string.card_details_model));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         Model model = Model.getModel(mDeck, mCardModelId, false);
         builder.append(model.getName());
-        builder.append("</td></tr><tr><td>");
+        builder.append("</b><br>");
         builder.append(res.getString(R.string.card_details_card_model));
-        builder.append("</td><td>");
+        builder.append(": <b>");
         builder.append(model.getCardModel(mCardModelId).getName());
-        builder.append("</td></tr></html></body>");
+        builder.append("</b></body></html>");
     return builder.toString();
     }
 
@@ -1022,7 +1073,9 @@ public class Card {
     	String typeAnswer = myCardModel.getTypeAnswer();
         // Check if we have a valid field to use as the answer to type.
     	if (null == typeAnswer || 0 == typeAnswer.trim().length()) {
-    		returnArray[0] = null;
+		// no field specified, compare with whole answer
+    		returnArray[0] = mAnswer;
+    		returnArray[1] = "";
                 return returnArray;
     	}
 

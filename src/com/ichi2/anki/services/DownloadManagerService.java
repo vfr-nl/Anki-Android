@@ -25,7 +25,6 @@ import android.content.SharedPreferences.Editor;
 import android.content.res.Resources;
 import android.database.CursorIndexOutOfBoundsException;
 import android.database.SQLException;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.IBinder;
 import android.os.RemoteCallbackList;
@@ -232,7 +231,7 @@ public class DownloadManagerService extends Service {
 
         File dir = new File(mDestination + "/tmp/");
         File[] fileList = dir.listFiles(new IncompleteDownloadsFilter());
-        HashSet<String> filenames = new HashSet();
+        HashSet<String> filenames = new HashSet<String>();
 
         // Get all incomplete downloads filenames
         if (fileList != null) {
@@ -298,6 +297,7 @@ public class DownloadManagerService extends Service {
     public void resumeDownload(Download download) {
         // Create tmp folder where the temporal decks are going to be stored
         new File(mDestination + "/tmp/").mkdirs();
+        AnkiDroidApp.createNoMediaFileIfMissing(new File(mDestination));
 
         if (download instanceof SharedDeckDownload) {
             SharedDeckDownload sharedDeckDownload = (SharedDeckDownload) download;
@@ -934,7 +934,6 @@ public class DownloadManagerService extends Service {
 
             Payload data = doInBackgroundLoadDeck(args);
             if (data.returnType == DeckTask.DECK_LOADED) {
-                double now = System.currentTimeMillis();
                 HashMap<String, Object> results = (HashMap<String, Object>) data.result;
                 Deck deck = (Deck) results.get("deck");
                 if (!deck.isUnpackNeeded()) {

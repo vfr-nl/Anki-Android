@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.Map.Entry;
 
 import com.tomgibara.android.veecheck.util.PrefSettings;
+import com.ichi2.anki.Utils.SqlCommandType;
+import static com.ichi2.anki.Utils.SqlCommandType.*;
 
 /**
  * Database layer for AnkiDroid. Can read the native Anki format through Android's SQLite driver.
@@ -41,35 +43,53 @@ public class AnkiDb {
      */
     private SQLiteDatabase mDatabase;
 
-    public static final int NO_WAL_WARNING = 0;
-    public static final int WAL_WARNING_SHOW = 1;
-    public static final int WAL_WARNING_ALREADY_SHOWN = 2;
-
     /**
      * Open a database connection to an ".anki" SQLite file.
      */
-    public AnkiDb(String ankiFilename) {
+    public AnkiDb(String ankiFilename, boolean forceDeleteJournalMode) {
         mDatabase = SQLiteDatabase.openDatabase(ankiFilename, null, SQLiteDatabase.OPEN_READWRITE
                 | SQLiteDatabase.NO_LOCALIZED_COLLATORS);
         if (mDatabase != null) {
             Cursor cur = null;
             try {
-                cur = mDatabase.rawQuery("PRAGMA journal_mode = DELETE", null);
+                String mode;
+            	SharedPreferences prefs = PrefSettings.getSharedPrefs(AnkiDroidApp.getInstance().getBaseContext());
+            	if (prefs.getBoolean("walMode", false) && !forceDeleteJournalMode) {
+            		mode = "WAL";
+            	} else {
+            		mode = "DELETE";
+            	}
+                cur = mDatabase.rawQuery("PRAGMA journal_mode", null);
                 if (cur.moveToFirst()) {
-                	String journalMode = cur.getString(0);
-                    Log.w(AnkiDroidApp.TAG, "Trying to set journal mode to DELETE. Result: " + journalMode);
-                	if (journalMode.equalsIgnoreCase("delete")) {
-                        PrefSettings.getSharedPrefs(AnkiDroidApp.getInstance().getBaseContext()).edit().putInt("walWarning", NO_WAL_WARNING).commit();
-                	} else {
-                        Log.e(AnkiDroidApp.TAG, "Journal could not be changed to DELETE. Deck will probably be unreadable on sqlite < 3.7");
-                        SharedPreferences prefs = PrefSettings.getSharedPrefs(AnkiDroidApp.getInstance().getBaseContext());
-                        if (prefs.getInt("walWarning", NO_WAL_WARNING) == NO_WAL_WARNING) {
-                        	prefs.edit().putInt("walWarning", WAL_WARNING_SHOW).commit();
-                        }
+                	String journalModeOld = cur.getString(0);
+                	cur.close();
+                	Log.w(AnkiDroidApp.TAG, "Current Journal mode: " + journalModeOld);                    		
+                	if (!journalModeOld.equalsIgnoreCase(mode)) {
+                    	cur = mDatabase.rawQuery("PRAGMA journal_mode = " + mode, null);
+                    	if (cur.moveToFirst()) {
+                        	String journalModeNew = cur.getString(0);
+                        	cur.close();
+                        	Log.w(AnkiDroidApp.TAG, "Old journal mode was: " + journalModeOld + ". Trying to set journal mode to " + mode + ". Result: " + journalModeNew);                    		
+                        	if (journalModeNew.equalsIgnoreCase("wal") && mode.equals("DELETE")) {
+                        		Log.e(AnkiDroidApp.TAG, "Journal could not be changed to DELETE. Deck will probably be unreadable on sqlite < 3.7");
+                        	}
+                    	}
                 	}
                 }
+                if (prefs.getBoolean("asyncMode", false)) {
+                    cur = mDatabase.rawQuery("PRAGMA synchronous = 0", null);
+                } else {
+                    cur = mDatabase.rawQuery("PRAGMA synchronous = 2", null);
+                }
+                cur.close();
+                cur = mDatabase.rawQuery("PRAGMA synchronous", null);
+                if (cur.moveToFirst()) {
+                	String syncMode = cur.getString(0);
+                	Log.w(AnkiDroidApp.TAG, "Current synchronous setting: " + syncMode);                    		
+                }
+                cur.close();
             } finally {
-                if (cur != null) {
+                if (cur != null && !cur.isClosed()) {
                     cur.close();
                 }
             }
@@ -164,12 +184,12 @@ public class AnkiDb {
     /**
      * Method for executing db commands with simultaneous storing of undo information. This should only be called from undo method.
      */
-    public void execSQL(Deck deck, String command, String table, ContentValues values, String whereClause) {
-    	if (command.equals("INS")) {
+    public void execSQL(Deck deck, SqlCommandType command, String table, ContentValues values, String whereClause) {
+    	if (command == SQL_INS) {
 			insert(deck, table, null, values);
-    	} else if (command.equals("UPD")) {
+    	} else if (command == SQL_UPD) {
 			update(deck, table, values, whereClause, null);
-    	} else if (command.equals("DEL")) {
+    	} else if (command == SQL_DEL) {
     		delete(deck, table, whereClause, null);
     	} else {
     		Log.i(AnkiDroidApp.TAG, "wrong command. no action performed");
@@ -185,7 +205,7 @@ public class AnkiDb {
     public long insert(Deck deck, String table, String nullColumnHack, ContentValues values) {
     	long rowid = mDatabase.insert(table, nullColumnHack, values);
     	if (rowid != -1 && deck.recordUndoInformation()) {
-        	deck.addUndoCommand("DEL", table, null, "rowid = " + rowid);
+        	deck.addUndoCommand(SQL_DEL, table, null, "rowid = " + rowid);
     	}
     	return rowid;
     }
@@ -216,7 +236,7 @@ public class AnkiDb {
     	if (deck.recordUndoInformation()) {
         	if (oldValuesArray != null) {
                 for (int i = 0; i < oldValuesArray.length; i++) {
-                    deck.addUndoCommand("UPD", table, oldValuesArray[i], whereClauseArray[i]);
+                    deck.addUndoCommand(SQL_UPD, table, oldValuesArray[i], whereClauseArray[i]);
                 }
         	} else {
         		ArrayList<String> ar = new ArrayList<String>();
@@ -254,7 +274,7 @@ public class AnkiDb {
                             	oldvalues.put(columns[i], cursor.getString(i));
 //                            }
                         }
-                        deck.addUndoCommand("UPD", table, oldvalues, "rowid = " + cursor.getString(len));
+                        deck.addUndoCommand(SQL_UPD, table, oldvalues, "rowid = " + cursor.getString(len));
                     }
                 } finally {
                     if (cursor != null) {
@@ -337,7 +357,7 @@ public class AnkiDb {
                         	oldvalues.put(columns[i], cursor.getString(i));
 //                        }
                     }
-                    deck.addUndoCommand("INS", table, oldvalues, null);
+                    deck.addUndoCommand(SQL_INS, table, oldvalues, null);
                 }
 			} finally {
                 if (cursor != null) {
