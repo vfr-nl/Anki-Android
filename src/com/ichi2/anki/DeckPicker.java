@@ -37,7 +37,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
+import android.text.InputFilter;
 import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.style.StyleSpan;
 import android.text.style.UnderlineSpan;
 import android.util.Log;
@@ -55,6 +57,7 @@ import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.View.OnClickListener;
 import android.widget.AdapterView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.SimpleAdapter;
@@ -66,6 +69,7 @@ import com.ichi2.async.Connection;
 import com.ichi2.async.Connection.Payload;
 import com.ichi2.themes.StyledDialog;
 import com.ichi2.themes.Themes;
+import com.ichi2.widget.WidgetStatus;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
 import java.io.File;
@@ -119,14 +123,16 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 	/**
 	 * Context Menus
 	 */
-    private static final int CONTEXT_MENU_OPTIMIZE = 0;
-    private static final int CONTEXT_MENU_CUSTOM_DICTIONARY = 1;
-    private static final int CONTEXT_MENU_DOWNLOAD_MEDIA = 2;
+    private static final int CONTEXT_MENU_DECK_SUMMARY = 0;
+    private static final int CONTEXT_MENU_OPTIMIZE = 1;
+    private static final int CONTEXT_MENU_CUSTOM_DICTIONARY = 2;
     private static final int CONTEXT_MENU_RESET_LANGUAGE = 3;
-    private static final int CONTEXT_MENU_REPAIR_DECK = 4;
-//    private static final int CONTEXT_MENU_RESTORE_BACKUPS = 4;
-    private static final int CONTEXT_MENU_REMOVE_BACKUPS = 5;
-    private static final int CONTEXT_MENU_DELETE_DECK = 6;
+    private static final int CONTEXT_MENU_REMOVE_BACKUPS = 4;
+    private static final int CONTEXT_MENU_RENAME_DECK = 5;
+    private static final int CONTEXT_MENU_REPAIR_DECK = 6;
+    private static final int CONTEXT_MENU_DELETE_DECK = 7;
+    private static final int CONTEXT_MENU_DOWNLOAD_MEDIA = 8;
+//  private static final int CONTEXT_MENU_RESTORE_BACKUPS = 9;
     
 	/**
 	 * Message types
@@ -211,6 +217,8 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 	private int mTotalCards = 0;
 	private int mTotalTime = 0;
 
+	private EditText mRenameDeckEditText;
+
 	int mStatisticType;
 
 	boolean mCompletionBarRestrictToActive = false; // set this to true in order to calculate completion bar only for active cards
@@ -263,7 +271,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 				return;
 			case CONTEXT_MENU_OPTIMIZE:
 				deckPath = data.get("filepath");
-				deck = getDeck(deckPath);
+				deck = DeckManager.getDeck(deckPath, DeckManager.REQUESTING_ACTIVITY_DECKPICKER, false);
 		    	DeckTask.launchDeckTask(DeckTask.TASK_TYPE_OPTIMIZE_DECK, mOptimizeDeckHandler, new DeckTask.TaskData(deck, 0));
 				return;
 			case CONTEXT_MENU_CUSTOM_DICTIONARY:
@@ -296,9 +304,51 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 				return;
 			case CONTEXT_MENU_DOWNLOAD_MEDIA:
 			    deckPath = data.get("filepath");
-			    deck = getDeck(deckPath);
+				deck = DeckManager.getDeck(deckPath, DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
 			    Reviewer.setupMedia(deck);
 			    Connection.downloadMissingMedia(mDownloadMediaListener, new Connection.Payload(new Object[] {deck}));
+				return;
+			case CONTEXT_MENU_RENAME_DECK:
+				StyledDialog.Builder builder2 = new StyledDialog.Builder(DeckPicker.this);
+				builder2.setTitle(res.getString(R.string.contextmenu_deckpicker_rename_deck));
+
+				mCurrentDeckPath = null;
+				mCurrentDeckPath = data.get("filepath");
+
+				mRenameDeckEditText = (EditText) new EditText(DeckPicker.this);
+				mRenameDeckEditText.setText(mCurrentDeckFilename.replace(".anki", ""));
+				InputFilter filter = new InputFilter() {
+					public CharSequence filter(CharSequence source, int start,
+							int end, Spanned dest, int dstart, int dend) {
+						for (int i = start; i < end; i++) {
+							if (!Character.isLetterOrDigit(source.charAt(i))) {
+								return "";
+							}
+						}
+						return null;
+					}
+				};
+				mRenameDeckEditText.setFilters(new InputFilter[] { filter });
+				builder2.setView(mRenameDeckEditText, false, true);
+				builder2.setPositiveButton(res.getString(R.string.rename),
+						new DialogInterface.OnClickListener() {
+
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								Log.i(AnkiDroidApp.TAG, "Renaming file " + mCurrentDeckFilename + " to " + mRenameDeckEditText.getText().toString());
+								File file = new File(mCurrentDeckPath);
+								String newFilename = file.getParentFile().getAbsolutePath() + "/" + mRenameDeckEditText.getText().toString().replace("[:\\/]", "") + ".anki";
+								File newFile = new File(newFilename);
+								if (newFile.exists() || !file.renameTo(newFile)) {
+									Themes.showThemedToast(DeckPicker.this, getResources().getString(R.string.rename_error, mCurrentDeckFilename), true);
+								} else {
+									populateDeckList(mPrefDeckPath);
+								}
+								mCurrentDeckPath = null;
+							}
+						});
+				builder2.setNegativeButton(res.getString(R.string.cancel), null);
+				builder2.create().show();
 				return;
 			case CONTEXT_MENU_REMOVE_BACKUPS:
 				mCurrentDeckPath = null;
@@ -313,6 +363,10 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 //			case CONTEXT_MENU_RESTORE_BACKUPS:
 //				BackupManager.restoreDeckBackup(DeckPicker.this, data.get("filepath"));
 //				return true;
+			case CONTEXT_MENU_DECK_SUMMARY:
+				mStatisticType = Statistics.TYPE_DECK_SUMMARY;
+				DeckTask.launchDeckTask(DeckTask.TASK_TYPE_LOAD_STATISTICS, mLoadStatisticsHandler, new DeckTask.TaskData(DeckPicker.this, new String[]{data.get("filepath")}, mStatisticType, 0));
+				return;
 			}
 		}
 	};
@@ -398,7 +452,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 			Collections.sort(mDeckList, new HashMapCompare());
 			mDeckListAdapter.notifyDataSetChanged();
-			// Log.i(AnkiDroidApp.TAG, "DeckPicker - mDeckList notified of changes");
+			Log.i(AnkiDroidApp.TAG, "DeckPicker - mDeckList notified of changes");
 			setTitleText();
             if (path == null) {
                 enableButtons(true);
@@ -440,7 +494,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 		@Override
 		public void onPostExecute(Payload data) {
-			// Log.i(AnkiDroidApp.TAG, "onPostExecute");
+			Log.i(AnkiDroidApp.TAG, "onPostExecute");
 			if (mProgressDialog != null) {
 				mProgressDialog.dismiss();
 			}
@@ -484,7 +538,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
         @Override
         public void onPostExecute(Payload data) {
-            // Log.i(AnkiDroidApp.TAG, "onPostExecute");
+            Log.i(AnkiDroidApp.TAG, "onPostExecute");
             Resources res = getResources();
             if (mProgressDialog != null) {
                 mProgressDialog.dismiss();
@@ -509,7 +563,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
             mMissingMediaAlert.show();
             
             Deck deck = (Deck) data.result;
-            closeDeck(deck);
+			DeckManager.closeDeck(deck.getDeckPath(), DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
          }
     };
 
@@ -552,7 +606,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 	/** Called when the activity is first created. */
 	@Override
 	protected void onCreate(Bundle savedInstanceState) throws SQLException {
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - onCreate");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - onCreate");
 		Themes.applyTheme(this);
 		super.onCreate(savedInstanceState);
 
@@ -672,24 +726,33 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 	@Override
 	protected void onPause() {
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - onPause");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - onPause");
 
         if ((AnkiDroidApp.zeemoteController() != null) && (AnkiDroidApp.zeemoteController().isConnected())){ 
-        	// Log.d("Zeemote","Removing listener in onPause");
+        	Log.d("Zeemote","Removing listener in onPause");
         	AnkiDroidApp.zeemoteController().removeButtonListener(this);
         	AnkiDroidApp.zeemoteController().removeJoystickListener(adapter);
     		adapter.removeButtonListener(this);
     		adapter = null;
-        }        
+        }
         
 		super.onPause();
 		waitForDeckLoaderThread();
 	}
 
 	@Override
+	protected void onStop() {
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - onStop");
+		super.onStop();
+		if (!isFinishing() && mIsFinished) {
+			WidgetStatus.update(this);
+		}
+	}
+
+	@Override
 	protected void onDestroy() {
 		super.onDestroy();
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - onDestroy()");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - onDestroy()");
 		if (mUnmountReceiver != null) {
 			unregisterReceiver(mUnmountReceiver);
 		}
@@ -851,7 +914,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 				dialog = null;
 				break;
 			}
-			String[] entries = new String[7];
+			String[] entries = new String[9];
 			entries[CONTEXT_MENU_OPTIMIZE] = res.getString(R.string.contextmenu_deckpicker_optimize_deck);
 			entries[CONTEXT_MENU_CUSTOM_DICTIONARY] = res.getString(R.string.contextmenu_deckpicker_set_custom_dictionary);
 			entries[CONTEXT_MENU_DOWNLOAD_MEDIA] = res.getString(R.string.contextmenu_deckpicker_download_missing_media);
@@ -859,8 +922,11 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 			entries[CONTEXT_MENU_REPAIR_DECK] = res.getString(R.string.backup_repair_deck);
 //			entries[CONTEXT_MENU_RESTORE_BACKUPS] = res.getString(R.string.R.string.contextmenu_deckpicker_restore_backups);
 			entries[CONTEXT_MENU_REMOVE_BACKUPS] = res.getString(R.string.contextmenu_deckpicker_remove_backups);
+			entries[CONTEXT_MENU_RENAME_DECK] = res.getString(R.string.contextmenu_deckpicker_rename_deck);
 			entries[CONTEXT_MENU_DELETE_DECK] = res.getString(R.string.contextmenu_deckpicker_delete_deck);
-	        builder.setTitle("contextmenu");
+			entries[CONTEXT_MENU_DECK_SUMMARY] = res.getStringArray(R.array.statistics_type_labels)[Statistics.TYPE_DECK_SUMMARY];
+
+			builder.setTitle("Context Menu");
 	        builder.setIcon(R.drawable.ic_menu_manage);
 	        builder.setItems(entries, mContextMenuListener);
 	        dialog = builder.create();
@@ -962,7 +1028,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event)  {
         if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
-        	// Log.i(AnkiDroidApp.TAG, "DeckPicker - onBackPressed()");
+        	Log.i(AnkiDroidApp.TAG, "DeckPicker - onBackPressed()");
         	closeDeckPicker(true);
         	return true;
         }
@@ -986,14 +1052,14 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 				public void onReceive(Context context, Intent intent) {
 					String action = intent.getAction();
 					if (action.equals(Intent.ACTION_MEDIA_UNMOUNTED)) {
-						// Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Unmounted");
+						Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Unmounted");
 						SharedPreferences preferences = PreferenceManager
 								.getDefaultSharedPreferences(getBaseContext());
 						String deckPath = preferences.getString("deckPath",
 								AnkiDroidApp.getStorageDirectory());
 						populateDeckList(deckPath);
 					} else if (action.equals(Intent.ACTION_MEDIA_MOUNTED)) {
-						// Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Mounted");
+						Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Mounted");
 						SharedPreferences preferences = PreferenceManager
 								.getDefaultSharedPreferences(getBaseContext());
 						String deckPath = preferences.getString("deckPath",
@@ -1316,7 +1382,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 
     private void populateDeckList(String location) {
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList");
 
 		if (!location.equals(mPrefDeckPath)) {
 		    mPrefDeckPath = location;
@@ -1343,11 +1409,11 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 		mFileList = fileList;
 		if (len > 0 && fileList != null) {
-			// Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, number of anki files = " + len);
+			Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, number of anki files = " + len);
 			for (File file : fileList) {
 				String absPath = file.getAbsolutePath();
 
-				// Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, file:" + file.getName());
+				Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, file:" + file.getName());
 
 				try {
 					HashMap<String, String> data = new HashMap<String, String>();
@@ -1375,9 +1441,9 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 			Thread thread = new Thread(this);
 			thread.start();
 		} else {
-			// Log.i(AnkiDroidApp.TAG, "populateDeckList - No decks found.");
+			Log.i(AnkiDroidApp.TAG, "populateDeckList - No decks found.");
 			if (!AnkiDroidApp.isSdCardMounted()) {
-				// Log.i(AnkiDroidApp.TAG, "populateDeckList - No sd card.");
+				Log.i(AnkiDroidApp.TAG, "populateDeckList - No sd card.");
 				setTitle(R.string.deckpicker_title_nosdcard);
 				showDialog(DIALOG_NO_SDCARD);
 			}
@@ -1397,17 +1463,17 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 		mDeckList.addAll(tree);
 		mDeckListView.clearChoices();
 		mDeckListAdapter.notifyDataSetChanged();
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, Ending");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - populateDeckList, Ending");
 	}
 
 	@Override
 	public void run() {
-		// Log.i(AnkiDroidApp.TAG, "Thread run - Beginning");
+		Log.i(AnkiDroidApp.TAG, "Thread run - Beginning");
 
 		if (mFileList != null && mFileList.length > 0) {
 			mLock.lock();
 			try {
-				// Log.i(AnkiDroidApp.TAG, "Thread run - Inside lock");
+				Log.i(AnkiDroidApp.TAG, "Thread run - Inside lock");
 
 				mIsFinished = false;
 				int i = 0;
@@ -1415,7 +1481,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 				    i++;
 					// Don't load any more decks if one has already been
 					// selected.
-					// Log.i(AnkiDroidApp.TAG, "Thread run - Before break mDeckIsSelected = " + mDeckIsSelected);
+					Log.i(AnkiDroidApp.TAG, "Thread run - Before break mDeckIsSelected = " + mDeckIsSelected);
 					if (mDeckIsSelected) {
 						break;
 					}
@@ -1429,7 +1495,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 					// See if a backup is needed (only done in deckpicker, if last backup is quite old or no backup at all is available)
 					// It is necessary to do it here, because retrieving deck information can already lead to a deck removal (Android bug)
 					if (BackupManager.isActivated() && BackupManager.safetyBackupNeeded(path, BackupManager.SAFETY_BACKUP_THRESHOLD)) {
-						// Log.i(AnkiDroidApp.TAG, "DeckPicker - Safety backup for deck " + path + "needed");
+						Log.i(AnkiDroidApp.TAG, "DeckPicker - Safety backup for deck " + path + "needed");
 						data.putString("absPath", path);
 						data.putInt("msgtype", MSG_CREATING_BACKUP);
 						msg = Message.obtain();
@@ -1476,7 +1542,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 						msg.setData(data);
 						mHandler.sendMessage(msg);
 					}
-					deck = getDeck(path);
+					deck = DeckManager.getDeck(path, DeckManager.REQUESTING_ACTIVITY_DECKPICKER, false);
 					if (deck == null) {
 						addBrokenDeck(path);
 						data.putString("absPath", path);
@@ -1494,7 +1560,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 						data.putInt("msgtype", MSG_UPGRADE_FAILURE);
 						data.putInt("version", version);
 						data.putString("notes", Deck.upgradeNotesToMessages(deck, getResources()));
-						closeDeck(deck);
+						DeckManager.closeDeck(path, DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
 						msg = Message.obtain();
 						msg.setData(data);
 						mHandler.sendMessage(msg);
@@ -1511,7 +1577,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 							String upgradeNotes = Deck.upgradeNotesToMessages(deck, getResources());
 							
-							closeDeck(deck);
+							DeckManager.closeDeck(path, DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
 
 							data.putString("absPath", path);
 							data.putInt("msgtype", MSG_UPGRADE_SUCCESS);
@@ -1612,7 +1678,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 		deckFilename = data.get("filepath");
 
 		if (deckFilename != null) {
-			// Log.i(AnkiDroidApp.TAG, "Selected " + deckFilename);
+			Log.i(AnkiDroidApp.TAG, "Selected " + deckFilename);
 			Intent intent = this.getIntent();
 			intent.putExtra(StudyOptions.OPT_DB, deckFilename);
 			setResult(RESULT_OK, intent);
@@ -1622,53 +1688,24 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 	}
 
 
-	public Deck getDeck(String filePath) {
-		Deck loadedDeck = AnkiDroidApp.deck();
-		if (loadedDeck != null && loadedDeck.getDeckPath().equals(filePath)) {
-			return loadedDeck;
-		} else {
-			Deck deck = null;
-			try {
-				deck = Deck.openDeck(filePath, false);
-			} catch (SQLException e) {
-				Log.w(AnkiDroidApp.TAG, "Could not open database " + filePath + ": " + e);
-				addBrokenDeck(filePath);
-			} catch (RuntimeException e) {
-				Log.w(AnkiDroidApp.TAG, "Could not open database " + filePath + ": " + e);
-				addBrokenDeck(filePath);
-			}
-			return deck;
-		}
-	}
-
-
 	public void addBrokenDeck(String filePath) {
 		if (!mBrokenDecks.contains(filePath)) {
 			mBrokenDecks.add(filePath);
 			BackupManager.restoreDeckIfMissing(filePath);
 		}
-	}
-
-
-	public void closeDeck(Deck deck) {
-		Deck loadedDeck = AnkiDroidApp.deck();
-		if (!(loadedDeck != null && loadedDeck == deck)) {
-			deck.closeDeck(true);				
-		}
+		DeckManager.closeDeck(filePath, DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
 	}
 
 
 	private void removeDeck(String deckFilename) {
 		if (deckFilename != null) {
-			AnkiDatabaseManager.closeDatabase(deckFilename);
+			DeckManager.closeDeck(deckFilename);
 			File file = new File(deckFilename);
 			boolean deleted = BackupManager.removeDeck(file);
 			if (deleted) {
-				// Log.i(AnkiDroidApp.TAG, "DeckPicker - " + deckFilename + " deleted");
+				Log.i(AnkiDroidApp.TAG, "DeckPicker - " + deckFilename + " deleted");
 				mDeckIsSelected = false;
-				if (AnkiDroidApp.deck() != null && AnkiDroidApp.deck().getDeckPath().equals(deckFilename)) {
-					AnkiDroidApp.setDeck(null);
-				}
+				DeckManager.closeDeck(deckFilename);		
 				populateDeckList(mPrefDeckPath);
 			} else {
 				Log.e(AnkiDroidApp.TAG, "Error: Could not delete "
@@ -1679,7 +1716,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 	private void waitForDeckLoaderThread() {
 		mDeckIsSelected = true;
-		// Log.i(AnkiDroidApp.TAG, "DeckPicker - waitForDeckLoaderThread(), mDeckIsSelected set to true");
+		Log.i(AnkiDroidApp.TAG, "DeckPicker - waitForDeckLoaderThread(), mDeckIsSelected set to true");
 		mLock.lock();
 		try {
 			while (!mIsFinished) {
@@ -1735,6 +1772,9 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
                 } catch (Exception e) {
                     Log.e(AnkiDroidApp.TAG, "onPostExecute - Dialog dismiss Exception = " + e.getMessage());
                 }
+            }
+            if (result == null) {
+            	return;
             }
             if (result.getBoolean()) {
 		    	if (mStatisticType == Statistics.TYPE_DECK_SUMMARY) {
@@ -1838,7 +1878,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
                     Log.e(AnkiDroidApp.TAG, "onPostExecute - Dialog dismiss Exception = " + e.getMessage());
                 }
             }
-            closeDeck(result.getDeck());
+			DeckManager.closeDeck(result.getDeck().getDeckPath(), DeckManager.REQUESTING_ACTIVITY_DECKPICKER);
     		StyledDialog dialog = (StyledDialog) onCreateDialog(DIALOG_OPTIMIZE_DATABASE);
     		dialog.setMessage(String.format(Utils.ENGLISH_LOCALE, getResources().getString(R.string.optimize_deck_message), Math.round(result.getLong() / 1024)));
     		dialog.show();
@@ -1961,7 +2001,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 
 	@Override
 	public void buttonReleased(ButtonEvent arg0) {
-		// Log.d("Zeemote","Button released, id: "+arg0.getButtonID());
+		Log.d("Zeemote","Button released, id: "+arg0.getButtonID());
 		Message msg = Message.obtain();
 		msg.what = MSG_ZEEMOTE_BUTTON_A + arg0.getButtonID(); //Button A = 0, Button B = 1...
 		if ((msg.what >= MSG_ZEEMOTE_BUTTON_A) && (msg.what <= MSG_ZEEMOTE_BUTTON_D)) { //make sure messages from future buttons don't get throug
@@ -1988,7 +2028,7 @@ public class DeckPicker extends Activity implements Runnable, IButtonListener {
 			}
 		}
 	      if ((AnkiDroidApp.zeemoteController() != null) && (AnkiDroidApp.zeemoteController().isConnected())){
-	    	  // Log.d("Zeemote","Adding listener in onResume");
+	    	  Log.d("Zeemote","Adding listener in onResume");
 	    	  AnkiDroidApp.zeemoteController().addButtonListener(this);
 	      	  adapter = new JoystickToButtonAdapter();
 	      	  AnkiDroidApp.zeemoteController().addJoystickListener(adapter);

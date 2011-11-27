@@ -134,7 +134,7 @@ public class Feedback extends Activity {
 
 	private void closeFeedback() {
 	        setResult(RESULT_OK);
-		finish();
+			finish();
                 if (StudyOptions.getApiLevel() > 4) {
                     ActivityTransitionAnimation.slide(Feedback.this, ActivityTransitionAnimation.FADE);
                 }
@@ -557,7 +557,7 @@ public class Feedback extends Activity {
                     result.success = true;
                     result.returnType = respCode;
                     result.result = Utils.convertStreamToString(response.getEntity().getContent());
-                    // Log.i(AnkiDroidApp.TAG, String.format("postFeedback OK: %s", result.result));
+                    Log.i(AnkiDroidApp.TAG, String.format("postFeedback OK: %s", result.result));
                     break;
 
                 default:
