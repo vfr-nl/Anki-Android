@@ -240,7 +240,6 @@ public class AnkiDroidApp extends Application {
         return null;
     }
 
-
     public static void saveExceptionReportFile(Throwable e, String origin) {
     	CustomExceptionHandler.getInstance().uncaughtException(null, e, origin);
     }

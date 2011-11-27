@@ -38,6 +38,7 @@ public class Themes {
 	public final static int THEME_ANDROID_DARK = 0;
 	public final static int THEME_ANDROID_LIGHT = 1;
 	public final static int THEME_BLUE = 2;
+	public final static int THEME_NO_THEME = 100;
 
 	public final static int CALLER_STUDYOPTIONS = 1;
 	public final static int CALLER_DECKPICKER_DECK = 3;
@@ -83,22 +84,27 @@ public class Themes {
 	private static Context mContext;
 
 	public static void applyTheme(Context context) {
+		applyTheme(context, -1);
+	}
+	public static void applyTheme(Context context, int theme) {
 		mContext = context;
 		if (mCurrentTheme == -1) {
 			loadTheme();
 		}
-		switch (mCurrentTheme) {
+		switch (theme == -1 ? mCurrentTheme : theme) {
 		case THEME_ANDROID_DARK:
 			context.setTheme(R.style.Theme_Black);
-			// Log.i(AnkiDroidApp.TAG, "Set theme: dark");
+			Log.i(AnkiDroidApp.TAG, "Set theme: dark");
 			break;
 		case THEME_ANDROID_LIGHT:
 			context.setTheme(R.style.Theme_Light);
-			// Log.i(AnkiDroidApp.TAG, "Set theme: light");
+			Log.i(AnkiDroidApp.TAG, "Set theme: light");
 			break;
 		case THEME_BLUE:
 			context.setTheme(R.style.Theme_Blue);
-			// Log.i(AnkiDroidApp.TAG, "Set theme: blue");
+			Log.i(AnkiDroidApp.TAG, "Set theme: blue");
+			break;
+		case -1:
 			break;
 		}
 	}

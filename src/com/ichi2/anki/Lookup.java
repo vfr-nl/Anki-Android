@@ -70,7 +70,7 @@ public class Lookup {
                 mIsDictionaryAvailable = false;
                 break;
         }
-        // Log.i(AnkiDroidApp.TAG, "Is intent available = " + mIsDictionaryAvailable);
+        Log.i(AnkiDroidApp.TAG, "Is intent available = " + mIsDictionaryAvailable);
         return mIsDictionaryAvailable;
 	}
 
@@ -170,13 +170,13 @@ public class Lookup {
     	if (mCurrentCard == null) {
     		return "";
     	} else {
-        	return MetaDB.getLanguage(mContext, mDeckFilename, Model.getModel(AnkiDroidApp.deck(), mCurrentCard.getCardModelId(), false).getId(), mCurrentCard.getCardModelId(), questionAnswer);    		
+        	return MetaDB.getLanguage(mContext, mDeckFilename, Model.getModel(DeckManager.getMainDeck(), mCurrentCard.getCardModelId(), false).getId(), mCurrentCard.getCardModelId(), questionAnswer);    		
     	}
     }
     
     private static void storeLanguage(String language, int questionAnswer) {
     	if (mCurrentCard != null) {
-        	MetaDB.storeLanguage(mContext, mDeckFilename,  Model.getModel(AnkiDroidApp.deck(), mCurrentCard.getCardModelId(), false).getId(), mCurrentCard.getCardModelId(), questionAnswer, language);    		
+        	MetaDB.storeLanguage(mContext, mDeckFilename,  Model.getModel(DeckManager.getMainDeck(), mCurrentCard.getCardModelId(), false).getId(), mCurrentCard.getCardModelId(), questionAnswer, language);    		
     	}
     }
 
