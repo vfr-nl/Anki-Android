@@ -26,7 +26,6 @@ import java.util.TreeMap;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -41,10 +40,11 @@ import android.preference.ListPreference;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.view.WindowManager.BadTokenException;
 
 import com.hlidskialf.android.preference.SeekBarPreference;
+import com.ichi2.themes.StyledProgressDialog;
 import com.ichi2.themes.Themes;
-import com.tomgibara.android.veecheck.Veecheck;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
 /**
@@ -55,10 +55,13 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
 	private static final int DIALOG_WAL = 0;
 	private static final int DIALOG_ASYNC = 1;
 	private static final int DIALOG_BACKUP = 2;
+	private static final int DIALOG_WRITE_ANSWERS = 4;
 
-    private boolean mVeecheckStatus;
+//    private boolean mVeecheckStatus;
     private PreferenceManager mPrefMan;
     private CheckBoxPreference zoomCheckboxPreference;
+    private CheckBoxPreference keepScreenOnCheckBoxPreference;
+    private CheckBoxPreference showAnswerCheckBoxPreference;
     private CheckBoxPreference swipeCheckboxPreference;
     private CheckBoxPreference animationsCheckboxPreference;
     private CheckBoxPreference walModePreference;
@@ -67,11 +70,11 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
     private ListPreference mLanguageSelection;
     private CharSequence[] mLanguageDialogLabels;
     private CharSequence[] mLanguageDialogValues;
-    private static String[] mAppLanguages = {"ar", "ca", "cs", "de", "el", "es_ES", "fi", "fr", "hu", "id", "it", "ja", "ko", "pl", "pt_PT", "ro", "ru", "sr", "sv-SE", "tr", "vi", "zh-CN", "zh-TW", "en"};
+    private static String[] mAppLanguages = {"ar", "ca", "cs", "de", "el", "es_ES", "fi", "fr", "hu", "id", "it", "ja", "ko", "nl", "no", "pl", "pt_PT", "ro", "ru", "sr", "sv-SE", "th", "tr", "vi", "zh-CN", "zh-TW", "en"};
     private static String[] mShowValueInSummList = {"language", "startup_mode", "hideQuestionInAnswer", "dictionary", "reportErrorMode", "minimumCardsDueForNotification", "deckOrder", "gestureShake", "gestureSwipeUp", "gestureSwipeDown", "gestureSwipeLeft", "gestureSwipeRight", "gestureDoubleTap", "gestureTapTop", "gestureTapBottom", "gestureTapRight", "gestureTapLeft", "theme"};
     private static String[] mShowValueInSummSeek = {"relativeDisplayFontSize", "relativeCardBrowserFontSize", "answerButtonSize", "whiteBoardStrokeWidth", "minShakeIntensity", "swipeSensibility", "timeoutAnswerSeconds", "timeoutQuestionSeconds", "animationDuration", "backupMax"};
     private TreeMap<String, String> mListsToUpdate = new TreeMap<String, String>();
-    private ProgressDialog mProgressDialog;
+    private StyledProgressDialog mProgressDialog;
     private boolean lockCheckAction = false;
     private boolean walModeInitiallySet = false;
     private String dialogMessage;
@@ -85,11 +88,13 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
         mPrefMan.setSharedPreferencesName(PrefSettings.SHARED_PREFS_NAME);
 
         addPreferencesFromResource(R.xml.preferences);
-        mVeecheckStatus = mPrefMan.getSharedPreferences().getBoolean(PrefSettings.KEY_ENABLED, PrefSettings.DEFAULT_ENABLED);
+//        mVeecheckStatus = mPrefMan.getSharedPreferences().getBoolean(PrefSettings.KEY_ENABLED, PrefSettings.DEFAULT_ENABLED);
         
         getPreferenceScreen().getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
         swipeCheckboxPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("swipe");
         zoomCheckboxPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("zoom");
+        keepScreenOnCheckBoxPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("keepScreenOn");
+        showAnswerCheckBoxPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("timeoutAnswer");
         animationsCheckboxPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("themeAnimations");
         walModePreference = (CheckBoxPreference) getPreferenceScreen().findPreference("walMode");
         useBackupPreference = (CheckBoxPreference) getPreferenceScreen().findPreference("useBackup");
@@ -227,92 +232,116 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
     protected void onPause() {
         super.onPause();
         // Reschedule the checking in case the user has changed the veecheck switch
-        if (mVeecheckStatus ^ mPrefMan.getSharedPreferences().getBoolean(PrefSettings.KEY_ENABLED, mVeecheckStatus)) {
-            sendBroadcast(new Intent(Veecheck.getRescheduleAction(this)));
-        }
+//        if (mVeecheckStatus ^ mPrefMan.getSharedPreferences().getBoolean(PrefSettings.KEY_ENABLED, mVeecheckStatus)) {
+//            sendBroadcast(new Intent(Veecheck.getRescheduleAction(this)));
+//        }
     }
 
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (key.equals("swipe")) {
-        	zoomCheckboxPreference.setChecked(false);
-        	zoomCheckboxPreference.setEnabled(!swipeCheckboxPreference.isChecked());
-        } else if (key.equals("language")) {
-			Intent intent = this.getIntent();
-			setResult(StudyOptions.RESULT_RESTART, intent);
-			finish();
-        } else if (key.equals("theme")) {
-        	if (!sharedPreferences.getString("theme", "0").equals("2")) {
-        		animationsCheckboxPreference.setChecked(false);
-        		animationsCheckboxPreference.setEnabled(false);
-        	} else {
-        		animationsCheckboxPreference.setEnabled(true);
-        	}
-        	Themes.resetTheme();
-			Intent intent = this.getIntent();
-			setResult(StudyOptions.RESULT_RESTART, intent);
-			finish();
-        } else if (Arrays.asList(mShowValueInSummList).contains(key)) {
-            updateListPreference(key);
-        } else if (Arrays.asList(mShowValueInSummSeek).contains(key)) {
-            updateSeekBarPreference(key);
-        } else if (key.equals("walMode") && !lockCheckAction) {
-        	lockCheckAction = true;
-        	if (sharedPreferences.getBoolean("walMode", false)) {
-        		showDialog(DIALOG_WAL);
-        	} else if (walModeInitiallySet) {
-        		walModeInitiallySet = false;
-        		dialogMessage = getResources().getString(R.string.wal_mode_set_message);
-            	DeckTask.launchDeckTask(DeckTask.TASK_TYPE_SET_ALL_DECKS_JOURNAL_MODE, mDeckOperationHandler, new DeckTask.TaskData(AnkiDroidApp.deck(), PrefSettings.getSharedPrefs(getBaseContext()).getString("deckPath", AnkiDroidApp.getStorageDirectory())));
-        	} else {
-        		lockCheckAction = false;        		
-        	}
-        } else if (key.equals("useBackup")) {
-        	if (lockCheckAction)  {
-        		lockCheckAction = false;
-        	} else if (!useBackupPreference.isChecked()) {
-        		lockCheckAction = true;
-        		useBackupPreference.setChecked(true);
-    			showDialog(DIALOG_BACKUP);
-        	} else {
-        		setReloadDeck();
-        	}
-        } else if (key.equals("asyncMode")) {
-        	if (lockCheckAction)  {
-        		lockCheckAction = false;
-        	} else if (asyncModePreference.isChecked()) {
-        		lockCheckAction = true;
-        		asyncModePreference.setChecked(false);
-    			showDialog(DIALOG_ASYNC);
-        	} else {
-        		setReloadDeck();
-        	}
-        } else if (key.equals("deckPath")) {
-        	File decksDirectory = new File(sharedPreferences.getString("deckPath", AnkiDroidApp.getStorageDirectory()));
-        	if (decksDirectory.exists()) {
-        		AnkiDroidApp.createNoMediaFileIfMissing(decksDirectory);
-        	}
+    	try {
+            if (key.equals("swipe")) {
+            	zoomCheckboxPreference.setChecked(false);
+            	zoomCheckboxPreference.setEnabled(!swipeCheckboxPreference.isChecked());
+            } else if (key.equals("timeoutAnswer")) {
+            	keepScreenOnCheckBoxPreference.setChecked(showAnswerCheckBoxPreference.isChecked());
+            } else if (key.equals("language")) {
+    			Intent intent = this.getIntent();
+    			setResult(StudyOptions.RESULT_RESTART, intent);
+    			finish();
+            } else if (key.equals("startup_mode")) {
+    			Intent intent = this.getIntent();
+    			setResult(StudyOptions.RESULT_RESTART, intent);
+    			finish();
+            } else if (key.equals("theme")) {
+            	if (!sharedPreferences.getString("theme", "2").equals("2")) {
+            		animationsCheckboxPreference.setChecked(false);
+            		animationsCheckboxPreference.setEnabled(false);
+            	} else {
+            		animationsCheckboxPreference.setEnabled(true);
+            	}
+            	Themes.loadTheme();
+            	switch (Integer.parseInt(sharedPreferences.getString("theme", "2"))) {
+            	case Themes.THEME_ANDROID_DARK:
+            	case Themes.THEME_ANDROID_LIGHT:
+            	case Themes.THEME_BLUE:
+            		sharedPreferences.edit().putString("defaultFont", "").commit();
+            		break;
+            	case Themes.THEME_FLAT:
+            		sharedPreferences.edit().putString("defaultFont", "OpenSans-Regular").commit();
+            		break;
+            	case Themes.THEME_WHITE:
+            		sharedPreferences.edit().putString("defaultFont", "OpenSans-Regular").commit();
+            		break;
+            	}
+    			Intent intent = this.getIntent();
+    			setResult(StudyOptions.RESULT_RESTART, intent);
+    			finish();
+            } else if (Arrays.asList(mShowValueInSummList).contains(key)) {
+                updateListPreference(key);
+            } else if (Arrays.asList(mShowValueInSummSeek).contains(key)) {
+                updateSeekBarPreference(key);
+            } else if (key.equals("writeAnswers") && sharedPreferences.getBoolean("writeAnswers", false)) {
+                showDialog(DIALOG_WRITE_ANSWERS);
+            } else if (key.equals("walMode") && !lockCheckAction) {
+            	lockCheckAction = true;
+            	if (sharedPreferences.getBoolean("walMode", false)) {
+            		showDialog(DIALOG_WAL);
+            	} else if (walModeInitiallySet) {
+            		walModeInitiallySet = false;
+            		dialogMessage = getResources().getString(R.string.wal_mode_set_message);
+                	DeckTask.launchDeckTask(DeckTask.TASK_TYPE_SET_ALL_DECKS_JOURNAL_MODE, mDeckOperationHandler, new DeckTask.TaskData(DeckManager.getMainDeck(), PrefSettings.getSharedPrefs(getBaseContext()).getString("deckPath", AnkiDroidApp.getStorageDirectory())));
+            	} else {
+            		lockCheckAction = false;        		
+            	}
+            } else if (key.equals("useBackup")) {
+            	if (lockCheckAction)  {
+            		lockCheckAction = false;
+            	} else if (!useBackupPreference.isChecked()) {
+            		lockCheckAction = true;
+            		useBackupPreference.setChecked(true);
+        			showDialog(DIALOG_BACKUP);
+            	} else {
+            		setReloadDeck();
+            	}
+            } else if (key.equals("asyncMode")) {
+            	if (lockCheckAction)  {
+            		lockCheckAction = false;
+            	} else if (asyncModePreference.isChecked()) {
+            		lockCheckAction = true;
+            		asyncModePreference.setChecked(false);
+        			showDialog(DIALOG_ASYNC);
+            	} else {
+            		setReloadDeck();
+            	}
+            } else if (key.equals("deckPath")) {
+            	File decksDirectory = new File(sharedPreferences.getString("deckPath", AnkiDroidApp.getStorageDirectory()));
+            	if (decksDirectory.exists()) {
+            		AnkiDroidApp.createNoMediaFileIfMissing(decksDirectory);
+            	}
+            }
+        } catch (BadTokenException e) {
+        	Log.e(AnkiDroidApp.TAG, "Preferences: BadTokenException on showDialog: " + e);
         }
-    }
+   }
 
 
     /** Returns a list of the names of the installed custom fonts. */
     private String[] getCustomFonts(String defaultValue) {
-        File[] files = Utils.getCustomFonts(this);
+        String[] files = Utils.getCustomFonts(this);
         int count = files.length;
         Log.d(AnkiDroidApp.TAG, "There are " + count + " custom fonts");
         String[] names = new String[count + 1];
-        for (int index = 0; index < count; ++index) {
-            names[index] = Utils.removeExtension(files[index].getName());
+        names[0] = defaultValue;
+        for (int index = 1; index < count + 1; ++index) {
+            names[index] =  Utils.removeExtension((new File(files[index - 1])).getName());
             Log.d(AnkiDroidApp.TAG, "Adding custom font: " + names[index]);
         }
-        names[count] = defaultValue;
         return names;
     }
 
 
     private void setReloadDeck() {
-    	dialogMessage = getResources().getString(R.string.close_current_deck);
-    	DeckTask.launchDeckTask(DeckTask.TASK_TYPE_CLOSE_DECK, mDeckOperationHandler, new DeckTask.TaskData(0, AnkiDroidApp.deck(), 0l, false));
+    	DeckManager.closeMainDeck();
 		setResult(StudyOptions.RESULT_RELOAD_DECK, getIntent());
     }
 
@@ -355,7 +384,7 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
     				lockCheckAction = true;
     				useBackupPreference.setChecked(false);
     				dialogMessage = getResources().getString(R.string.backup_delete);
-    				DeckTask.launchDeckTask(DeckTask.TASK_TYPE_DELETE_BACKUPS, mDeckOperationHandler, null);
+    				DeckTask.launchDeckTask(DeckTask.TASK_TYPE_DELETE_BACKUPS, mDeckOperationHandler, (DeckTask.TaskData[]) null);
     			}
     		});
     		builder.setNegativeButton(res.getString(R.string.no), null);
@@ -375,6 +404,12 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
     		});
     		builder.setNegativeButton(res.getString(R.string.no), null);
     		break;
+        case DIALOG_WRITE_ANSWERS:
+    		builder.setTitle(res.getString(R.string.write_answers));
+    		builder.setCancelable(false);
+    		builder.setMessage(res.getString(R.string.write_answers_message));
+    		builder.setNegativeButton(res.getString(R.string.ok), null);
+    		break;
         }
 		return builder.create();    	
     }
@@ -383,7 +418,7 @@ public class Preferences extends PreferenceActivity implements OnSharedPreferenc
     private DeckTask.TaskListener mDeckOperationHandler = new DeckTask.TaskListener() {
         @Override
         public void onPreExecute() {
-        	mProgressDialog = ProgressDialog.show(Preferences.this, "", dialogMessage, true);
+        	mProgressDialog = StyledProgressDialog.show(Preferences.this, "", dialogMessage, true);
         }
 
 

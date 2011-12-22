@@ -15,7 +15,6 @@
 package com.ichi2.anki;
 
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -47,7 +46,6 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.ichi2.anim.ActivityTransitionAnimation;
 import com.ichi2.anki.services.DownloadManagerService;
@@ -56,6 +54,7 @@ import com.ichi2.anki.services.ISharedDeckServiceCallback;
 import com.ichi2.async.Connection;
 import com.ichi2.async.Connection.Payload;
 import com.ichi2.themes.StyledDialog;
+import com.ichi2.themes.StyledProgressDialog;
 import com.ichi2.themes.Themes;
 
 import java.util.ArrayList;
@@ -73,7 +72,7 @@ public class SharedDeckPicker extends Activity {
      */
     private BroadcastReceiver mUnmountReceiver = null;
 
-    private ProgressDialog mProgressDialog;
+    private StyledProgressDialog mProgressDialog;
     private StyledDialog mNoConnectionAlert;
     private StyledDialog mConnectionErrorAlert;
 
@@ -136,9 +135,7 @@ public class SharedDeckPicker extends Activity {
                     for (Download d : mSharedDeckDownloads) {
                         if (d.getTitle().equals(selectedDeck.getTitle())) {
                             // Duplicate downloads not allowed, sorry.
-                            Toast duplicateMessage = Toast.makeText(SharedDeckPicker.this,
-                                res.getString(R.string.duplicate_download), Toast.LENGTH_SHORT);
-                            duplicateMessage.show();
+                        	Themes.showThemedToast(SharedDeckPicker.this, res.getString(R.string.duplicate_download), true);
                             return;
                         }
                     }
@@ -495,13 +492,15 @@ public class SharedDeckPicker extends Activity {
             if (mProgressDialog != null) {
                 mProgressDialog.dismiss();
             }
-
             if (data.success) {
                 mSharedDecks.clear();
                 mSharedDecks.addAll((List<SharedDeck>) data.result);
                 findDecks();
             } else {
-                if (mConnectionErrorAlert != null) {
+            	if (data.returnType == Connection.RETURN_TYPE_OUT_OF_MEMORY) {
+    				Themes.showThemedToast(SharedDeckPicker.this, getResources().getString(R.string.error_insufficient_memory), false);
+    		    	finish();            		
+            	} else if (mConnectionErrorAlert != null) {
                     mConnectionErrorAlert.show();
                 }
             }
@@ -511,11 +510,11 @@ public class SharedDeckPicker extends Activity {
         @Override
         public void onPreExecute() {
             if (mProgressDialog == null || !mProgressDialog.isShowing()) {
-                mProgressDialog = ProgressDialog.show(SharedDeckPicker.this, "",
+                mProgressDialog = StyledProgressDialog.show(SharedDeckPicker.this, "",
                         getResources().getString(R.string.loading_shared_decks), true, true, new DialogInterface.OnCancelListener() {
                     @Override
                     public void onCancel(DialogInterface dialog) {
-                        Connection.cancelGetDecks();
+                        Connection.cancelGetSharedDecks();
                         closeSharedDeckPicker();
                     }
                 });

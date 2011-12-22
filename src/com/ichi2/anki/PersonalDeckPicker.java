@@ -15,7 +15,6 @@
 package com.ichi2.anki;
 
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -51,6 +50,7 @@ import com.ichi2.anki.services.IPersonalDeckServiceCallback;
 import com.ichi2.async.Connection;
 import com.ichi2.async.Connection.Payload;
 import com.ichi2.themes.StyledDialog;
+import com.ichi2.themes.StyledProgressDialog;
 import com.ichi2.themes.Themes;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
@@ -65,7 +65,7 @@ public class PersonalDeckPicker extends Activity {
      */
     private BroadcastReceiver mUnmountReceiver = null;
 
-    private ProgressDialog mProgressDialog;
+    private StyledProgressDialog mProgressDialog;
     private StyledDialog mNoConnectionAlert;
     private StyledDialog mConnectionErrorAlert;
     private StyledDialog mDownloadOverwriteAlert;
@@ -119,6 +119,15 @@ public class PersonalDeckPicker extends Activity {
                     return;
                 }
                 String deckName = (String) deckNameObject;
+
+                  for (Download d : mPersonalDeckDownloads) {
+                        if (d.getTitle().equals(deckName)) {
+                            // Duplicate downloads not allowed, sorry.
+                        	Themes.showThemedToast(PersonalDeckPicker.this, getResources().getString(R.string.duplicate_download), true);
+                            return;
+                        }
+                    }
+
                 Download personalDeckDownload = new Download(deckName);
                 mDestination = PrefSettings.getSharedPrefs(getBaseContext()).getString("deckPath", AnkiDroidApp.getStorageDirectory());
                 setDeckToDownload(personalDeckDownload);
@@ -472,11 +481,10 @@ public class PersonalDeckPicker extends Activity {
         @Override
         public void onPreExecute() {
             if (mProgressDialog == null || !mProgressDialog.isShowing()) {
-                mProgressDialog = ProgressDialog.show(PersonalDeckPicker.this, "",
+                mProgressDialog = StyledProgressDialog.show(PersonalDeckPicker.this, "",
                         getResources().getString(R.string.loading_personal_decks), true, true, new DialogInterface.OnCancelListener() {
                 	@Override
                 	public void onCancel(DialogInterface dialog) {
-                		Connection.cancelGetDecks();
                 		closePersonalDeckPicker();
                 	}
                 });
