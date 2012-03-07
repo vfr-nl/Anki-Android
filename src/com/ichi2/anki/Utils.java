@@ -24,6 +24,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.text.Html;
 import android.util.Log;
 import android.view.Menu;
@@ -32,6 +33,9 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import com.ichi2.compat.Compat;
+import com.ichi2.compat.CompatV11;
+import com.ichi2.compat.CompatV3;
 import com.mindprod.common11.BigDate;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
@@ -418,6 +422,11 @@ public class Utils {
     }
 
 
+    /** Replace HTML line break tags with new lines. */
+    public static String replaceLineBreak(String text) {
+        return text.replaceAll("<br(\\s*\\/*)>", "\n");
+    }
+
 
     /**
      * Converts an InputStream to a String.
@@ -436,7 +445,7 @@ public class Utils {
             rd.close();
             contentOfMyInputStream = sb.toString();
         } catch (Exception e) {
-            e.printStackTrace();
+        	Log.e(AnkiDroidApp.TAG, Log.getStackTraceString(e));
         }
 
         return contentOfMyInputStream;
@@ -774,13 +783,23 @@ public class Utils {
      * @return The joined tags in a single string 
      */
     public static String joinTags(Collection<String> tags) {
-        StringBuilder result = new StringBuilder(128);
-        for (String tag : tags) {
-            result.append(tag).append(" ");
-        }
-        return result.toString().trim();
+        return join(" ", tags.toArray(new String[0]));
     }
-    
+
+
+    /** Joins the given string values using the delimiter between them. */
+    public static String join(String delimiter, String... values) {
+        StringBuilder sb = new StringBuilder();
+        for (String value : values) {
+            if (sb.length() != 0) {
+                sb.append(delimiter);
+            }
+            sb.append(value);
+        }
+        return sb.toString();
+    }
+
+
     /**
      * Strip leading/trailing/superfluous spaces/commas from a tags string. Remove duplicates and sort.
      * 
@@ -996,7 +1015,31 @@ public class Utils {
         }
     }
 
-    /** Returns the filename without the extension. */
+
+    /**
+     * Creates a {@link Compat} object adequate to the device version.
+     */
+    public static Compat createCompat() {
+        if (getApiLevel() >= 11) {
+            return new CompatV11();
+        } else {
+        	return new CompatV3();
+        }
+    }
+
+
+	/** Returns the API level of this device. */
+	public static int getApiLevel() {
+	    try {
+	        return Integer.parseInt(Build.VERSION.SDK);
+	    } catch (NumberFormatException e) {
+	        // If there is an error, return the minimum supported version.
+	        return 3;
+	    }
+	}
+
+
+	/** Returns the filename without the extension. */
     public static String removeExtension(String filename) {
       int dotPosition = filename.lastIndexOf('.');
       if (dotPosition == -1) {
@@ -1005,16 +1048,50 @@ public class Utils {
       return filename.substring(0, dotPosition);
     }
 
+
+    /** Removes any character that are not valid as deck names. */
+    public static String removeInvalidDeckNameCharacters(String name) {
+        if (name == null) { return null; }
+        // The only characters that we cannot absolutely allow to appear in the filename are the ones reserved in some
+        // file system. Currently these are \, /, and :, in order to cover Linux, OSX, and Windows.
+        return name.replaceAll("[^A-Za-z0-9 ()\\-]", "");
+    }
+
     /** Returns a list of files for the installed custom fonts. */
-    public static File[] getCustomFonts(Context context) {
+    public static String[] getCustomFonts(Context context) {
         SharedPreferences preferences = PrefSettings.getSharedPrefs(context);
         String deckPath = preferences.getString("deckPath",
                 AnkiDroidApp.getStorageDirectory() + "/AnkiDroid");
         String fontsPath = deckPath + "/fonts/";
         File fontsDir = new File(fontsPath);
-        if (!fontsDir.exists() || !fontsDir.isDirectory()) {
-          return new File[0];
+        int fontsCount = 0;
+        File[] fontsList = null;
+        if (fontsDir.exists() && fontsDir.isDirectory()) {
+        	fontsCount = fontsDir.listFiles().length;
+        	fontsList = fontsDir.listFiles();
         }
-        return fontsDir.listFiles();
+        String[] ankiDroidFonts = null;
+        String assetPath = "/android_asset/fonts/";
+        int adFontsCount = 0;
+		try {
+			ankiDroidFonts = context.getAssets().list("fonts");
+			adFontsCount = ankiDroidFonts.length;
+		} catch (IOException e) {
+			Log.e(AnkiDroidApp.TAG, "Error on retrieving ankidroid fonts: " + e);
+		}
+		String[] fonts = new String[fontsCount + adFontsCount];
+        for (int i = 0; i < fontsCount; i++) {
+        	fonts[i] = fontsList[i].getAbsolutePath();
+        }
+        for (int i = fontsCount; i < fonts.length; i++) {
+        	fonts[i] = assetPath + ankiDroidFonts[i - fontsCount];        	
+        }
+
+        if (fonts.length > 0) {
+        	return fonts;
+        } else {
+        	return new String[0];
+        }
     }
+
 }

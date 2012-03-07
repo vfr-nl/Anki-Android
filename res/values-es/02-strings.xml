@@ -57,7 +57,7 @@
   <string name="studyoptions_no_external_storage_title">Almacenamiento externo no disponible</string>
   <string name="studyoptions_no_external_storage_message">Almacenamiento externo no disponible actualmente. AnkiDroid necesita tener acceso a la tarjeta de memoria para leer y cargar tus mazos. Comprueba que la tarjeta de memoria está conectada e inténtalo de nuevo.</string>
   <string name="fact_adder_intent_title">Tarjeta de AnkiDroid</string>
-  <string name="fact_adder_swap">Intercambiar</string>
+  <string name="fact_adder_swap">nome</string>
   <string name="deckpicker_select_dictionary_title">Seleccionar diccionario</string>
   <string name="deckpicker_select_dictionary_default">Por defecto</string>
   <string name="card_editor_add_card">Añadir tarjeta</string>
@@ -73,6 +73,7 @@
   <string name="help_online">Ayuda en línea</string>
   <string name="help_faq">Preguntas más frecuentes</string>
   <string name="help_tutorial">Mazo tutorial</string>
+  <string name="simple_interface_hint">Vaciar %s. Ten en cuenta que la interfaz simple no puede mostrar imágenes/sonidos etc.</string>
   <plurals name="factadder_cards_added">
     <item quantity="one">Se ha añadido 1 tarjeta</item>
     <item quantity="other">Se han añadido %d tarjetas</item>

@@ -16,7 +16,6 @@ package com.ichi2.anki;
 
 import android.app.Activity;
 import android.app.Dialog;
-import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -34,6 +33,7 @@ import android.text.Spanned;
 import android.text.method.KeyListener;
 import android.text.style.StrikethroughSpan;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -55,7 +55,10 @@ import android.widget.AdapterView.OnItemClickListener;
 import com.ichi2.anim.ActivityTransitionAnimation;
 import com.ichi2.anim.ViewAnimation;
 import com.ichi2.anki.Fact.Field;
+import com.ichi2.filters.FilterFacade;
 import com.ichi2.themes.StyledDialog;
+import com.ichi2.themes.StyledDialog.Builder;
+import com.ichi2.themes.StyledProgressDialog;
 import com.ichi2.themes.Themes;
 import com.ichi2.widget.AnkiDroidWidgetBig;
 import com.tomgibara.android.veecheck.util.PrefSettings;
@@ -147,6 +150,8 @@ public class CardEditor extends Activity {
 
 	/* indicates if a new fact is added or a card is edited */
 	private boolean mAddFact;
+	
+	private boolean mAedictIntent;
 
 	/* indicates which activity called card editor */
 	private int mCaller;
@@ -178,7 +183,7 @@ public class CardEditor extends Activity {
 	private EditText mNewTagEditText;
 	private StyledDialog mTagsDialog;
 
-	private ProgressDialog mProgressDialog;
+	private StyledProgressDialog mProgressDialog;
 
 //	private String mSourceLanguage;
 //	private String mTargetLanguage;
@@ -196,7 +201,7 @@ public class CardEditor extends Activity {
 		@Override
 		public void onPreExecute() {
 			Resources res = getResources();
-			mProgressDialog = ProgressDialog.show(CardEditor.this, "", res
+			mProgressDialog = StyledProgressDialog.show(CardEditor.this, "", res
 					.getString(R.string.saving_facts), true);
 		}
 
@@ -226,7 +231,7 @@ public class CardEditor extends Activity {
 					Log.e(AnkiDroidApp.TAG, "Card Editor: Error on dismissing progress dialog: " + e);
 				}
 			}
-			if (!mAddFact || mCaller == CALLER_CARDEDITOR || mCaller == CALLER_BIGWIDGET_EDIT) {
+			if (!mAddFact || mCaller == CALLER_CARDEDITOR || mCaller == CALLER_BIGWIDGET_EDIT || mAedictIntent) {
 				closeCardEditor();
 			} else if (mCaller == CALLER_CARDEDITOR_INTENT_ADD) {
 				if (count > 0) {
@@ -259,9 +264,9 @@ public class CardEditor extends Activity {
 		View mainView = getLayoutInflater().inflate(R.layout.card_editor, null);
 		setContentView(mainView);
 		Themes.setWallpaper(mainView);
+		Themes.setContentStyle(mainView, Themes.CALLER_CARD_EDITOR);
 
 		mFieldsLayoutContainer = (LinearLayout) findViewById(R.id.CardEditorEditFieldsLayout);
-		Themes.setTextViewStyle(mFieldsLayoutContainer);
 
 		setTitle(R.string.cardeditor_title);
 		mSave = (Button) findViewById(R.id.CardEditorSaveButton);
@@ -274,6 +279,7 @@ public class CardEditor extends Activity {
 
 		mNewSelectedCardModels = new LinkedHashMap<Long, CardModel>();
 		cardModelIds = new ArrayList<Long>();
+		mAedictIntent = false;
 
 		Intent intent = getIntent();
 		if (savedInstanceState != null) {
@@ -361,8 +367,13 @@ public class CardEditor extends Activity {
 				mSourceText = extras.getString(SOURCE_TEXT);
 				mTargetText = extras.getString(TARGET_TEXT);
 			} else {
-				mSourceText = extras.getString(Intent.EXTRA_SUBJECT);
-				mTargetText = extras.getString(Intent.EXTRA_TEXT);
+                Pair<String, String> messages = new Pair<String, String>(extras.getString(Intent.EXTRA_SUBJECT), extras.getString(Intent.EXTRA_TEXT));
+
+                /* Filter garbage information */
+                Pair<String, String> cleanMessages = new FilterFacade(getBaseContext()).filter(messages);
+
+				mSourceText = cleanMessages.first;
+				mTargetText = cleanMessages.second;
 			}
 			if (mSourceText == null && mTargetText == null) {
 				finish();
@@ -514,19 +525,28 @@ public class CardEditor extends Activity {
 			if (notepad_lines[i].startsWith("[") && notepad_lines[i].endsWith("]")) {
 				category = notepad_lines[i].substring(1,notepad_lines[i].length()-1);
 				if (category.equals("default")) {
-					if (notepad_lines.length > 1) {
-						String[] entry_lines = notepad_lines[1].split(":");
+					if (notepad_lines.length > i+1) {
+						String[] entry_lines = notepad_lines[i+1].split(":");
 						if (entry_lines.length > 1){
 							mSourceText = entry_lines[1];
 							mTargetText = entry_lines[0];
+							mAedictIntent = true;
+						} else {
+							Themes.showThemedToast(CardEditor.this, getResources().getString(
+									R.string.intent_aedict_empty), false);
+							return true;
 						}
+					} else {
+						Themes.showThemedToast(CardEditor.this, getResources().getString(
+								R.string.intent_aedict_empty), false);
+						return true;
 					}
 					return false;
 				}
-				//TODO: implement non-interactive adding from category tabs in Aedict
 			}
 		}
-		Themes.showThemedToast(CardEditor.this, "AnkiDroid: adding from categories is not yet supported.", true);
+		Themes.showThemedToast(CardEditor.this, getResources().getString(
+				R.string.intent_aedict_category), false);
 		return true;
 	}
 
@@ -713,7 +733,16 @@ public class CardEditor extends Activity {
 		mCurrentSelectedModelId = mDeck.getCurrentModelId();
 		modelChanged();
 		mEditFields.get(0).setText(mSourceText);
-		mEditFields.get(1).setText(mTargetText);
+		if (mAedictIntent && (mEditFields.size() == 3) && mTargetText.contains("[")) {
+			String[] subfields = mTargetText.replaceFirst("\\[", "\u001f").split("\\x1f");
+			if (subfields.length > 1) {
+				mEditFields.get(1).setText(subfields[0]);
+				mEditFields.get(2).setText(subfields[1].substring(0,subfields[1].length()-1));
+			}
+		}
+		else {
+			mEditFields.get(1).setText(mTargetText);
+		}
 	}
 
 	private void prepareForIntentAddition() {
@@ -734,8 +763,8 @@ public class CardEditor extends Activity {
 	private void closeCardEditor() {
 		DeckManager.closeDeck(mDeck.getDeckPath(), DeckManager.REQUESTING_ACTIVITY_CARDEDITOR);
 		finish();
-		if (mCaller == CALLER_CARDEDITOR_INTENT_ADD) {
-			if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
+		if (mCaller == CALLER_CARDEDITOR_INTENT_ADD || mCaller == CALLER_BIGWIDGET_EDIT || mCaller == CALLER_BIGWIDGET_ADD) {
+			if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) { 
 				ActivityTransitionAnimation.slide(CardEditor.this,
 						ActivityTransitionAnimation.FADE);
 			}
@@ -760,153 +789,15 @@ public class CardEditor extends Activity {
 
 		switch (id) {
 		case DIALOG_TAGS:
-			builder.setTitle(R.string.studyoptions_limit_select_tags);
-			builder.setPositiveButton(res.getString(R.string.select),
-					new OnClickListener() {
-						@Override
-						public void onClick(DialogInterface dialog, int which) {
-							String tags = mSelectedTags.toString();
-							mFactTags = tags.substring(1, tags.length() - 1);
-							mTags.setText(getResources().getString(
-									R.string.CardEditorTags, mFactTags));
-						}
-					});
-			builder.setNegativeButton(res.getString(R.string.cancel), null);
-
-			mNewTagEditText = (EditText) new EditText(this);
-			mNewTagEditText.setHint(R.string.add_new_tag);
-
-			InputFilter filter = new InputFilter() {
-				public CharSequence filter(CharSequence source, int start,
-						int end, Spanned dest, int dstart, int dend) {
-					for (int i = start; i < end; i++) {
-						if (!(Character.isLetterOrDigit(source.charAt(i)))) {
-							return "";
-						}
-					}
-					return null;
-				}
-			};
-			mNewTagEditText.setFilters(new InputFilter[] { filter });
-
-			ImageView mAddTextButton = new ImageView(this);
-			mAddTextButton.setImageResource(R.drawable.ic_addtag);
-			mAddTextButton.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					String tag = mNewTagEditText.getText().toString();
-					if (tag.length() != 0) {
-						for (int i = 0; i < allTags.length; i++) {
-							if (allTags[i].equalsIgnoreCase(tag)) {
-								mNewTagEditText.setText("");
-								return;
-							}
-						}
-						mSelectedTags.add(tag);
-						String[] oldTags = allTags;
-						allTags = new String[oldTags.length + 1];
-						allTags[0] = tag;
-						for (int j = 1; j < allTags.length; j++) {
-							allTags[j] = oldTags[j - 1];
-						}
-						mTagsDialog.addMultiChoiceItems(tag, true);
-						mNewTagEditText.setText("");
-					}
-				}
-			});
-
-			FrameLayout frame = new FrameLayout(this);
-			FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-					ViewGroup.LayoutParams.WRAP_CONTENT,
-					ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.RIGHT
-							| Gravity.CENTER_VERTICAL);
-			params.rightMargin = 10;
-			mAddTextButton.setLayoutParams(params);
-			frame.addView(mNewTagEditText);
-			frame.addView(mAddTextButton);
-
-			builder.setView(frame, false, true);
-			dialog = builder.create();
-			mTagsDialog = dialog;
+		    dialog = createDialogTags(builder, res);
 			break;
 
 		case DIALOG_DECK_SELECT:
-			dialog = DeckManager.getSelectDeckDialog(this, new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int item) {
-					loadDeck(item);
-				}
-			}, new OnCancelListener() {
-				@Override
-				public void onCancel(DialogInterface arg0) {
-					mCancelled = true;
-				}
-
-			}, new OnDismissListener() {
-				@Override
-				public void onDismiss(DialogInterface arg0) {
-					if (mCancelled == true) {
-						finish();
-						if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
-							ActivityTransitionAnimation.slide(CardEditor.this,
-									ActivityTransitionAnimation.FADE);
-						}			
-					} else if (mDeck == null) {
-						showDialog(DIALOG_DECK_SELECT);
-					}
-				}
-			}, mCaller == CALLER_CARDEDITOR_INTENT_ADD ? null : res.getString(R.string.intent_add_save_for_later), mCaller == CALLER_CARDEDITOR_INTENT_ADD ? null : new View.OnClickListener() {
-
-				@Override
-				public void onClick(View v) {
-					MetaDB.saveIntentInformation(CardEditor.this, mSourceText, mTargetText);
-					mCancelled = true;
-					finish();
-				}				
-			});
+		    dialog = createDialogDeckSelect(builder, res);
 			break;
 
 		case DIALOG_MODEL_SELECT:
-			ArrayList<CharSequence> dialogItems = new ArrayList<CharSequence>();
-			// Use this array to know which ID is associated with each
-			// Item(name)
-			final ArrayList<Long> dialogIds = new ArrayList<Long>();
-
-			Model mModel;
-			builder.setTitle(R.string.select_model);
-			for (Long i : mModels.keySet()) {
-				mModel = mModels.get(i);
-				dialogItems.add(mModel.getName());
-				dialogIds.add(i);
-			}
-			// Convert to Array
-			String[] items = new String[dialogItems.size()];
-			dialogItems.toArray(items);
-
-			builder.setItems(items, new DialogInterface.OnClickListener() {
-				public void onClick(DialogInterface dialog, int item) {
-					long oldModelId = mCurrentSelectedModelId;
-					mCurrentSelectedModelId = dialogIds.get(item);
-					if (oldModelId != mCurrentSelectedModelId) {
-						int size = mEditFields.size();
-						String[] oldValues = new String[size];
-						for (int i = 0; i < size; i++) {
-							oldValues[i] = mEditFields.get(i).getText()
-									.toString();
-						}
-						modelChanged();
-						if ((mSourceText == null || mSourceText.length() == 0)
-								&& (mTargetText == null || mTargetText
-										.length() == 0)) {
-							for (int i = 0; i < Math.min(size, mEditFields
-									.size()); i++) {
-								mEditFields.get(i).setText(oldValues[i]);
-							}
-						}
-					}
-				}
-			});
-			dialog = builder.create();
+		    dialog = createDialogModelSelect(builder, res);
 			break;
 		case DIALOG_CARD_MODEL_SELECT:
 			builder.setTitle(res.getString(R.string.select_card_model));
@@ -952,61 +843,218 @@ public class CardEditor extends Activity {
 			break;
 
 		case DIALOG_INTENT_INFORMATION:
-    		builder.setTitle(res.getString(R.string.intent_add_saved_information));
-    		ListView listView = new ListView(this);
-    		
-    		mIntentInformationAdapter = new SimpleAdapter(this, mIntentInformation, R.layout.card_item, new String[] { "source", "target", "id"}, new int[] { R.id.card_question, R.id.card_answer, R.id.card_item});
-    		listView.setAdapter(mIntentInformationAdapter);
-    		listView.setOnItemClickListener(new OnItemClickListener() {
-    			@Override
-    			public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-    				Intent intent = new Intent(CardEditor.this, CardEditor.class);
-    				intent.putExtra(EXTRA_CALLER, CALLER_CARDEDITOR_INTENT_ADD);
-    				HashMap<String, String> map = mIntentInformation.get(position);
-    				StringBuilder contents = new StringBuilder();
-    				contents.append(map.get("source"))
-    					.append("\u001f")
-    					.append(map.get("target"));
-					intent.putExtra(EXTRA_CONTENTS, contents.toString());
-					intent.putExtra(EXTRA_ID, map.get("id"));
-    				startActivityForResult(intent, REQUEST_INTENT_ADD);
-    				if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
-    					ActivityTransitionAnimation.slide(CardEditor.this,
-    							ActivityTransitionAnimation.FADE);
-    				}
-    				mIntentInformationDialog.dismiss();
-    			}
-    		});
-    		mCardItemBackground = Themes.getCardBrowserBackground()[0];
-    		mIntentInformationAdapter.setViewBinder(new SimpleAdapter.ViewBinder() {
-    			@Override
-    			public boolean setViewValue(View view, Object arg1, String text) {
-    				if (view.getId() == R.id.card_item) {
-    					view.setBackgroundResource(mCardItemBackground);
-    					return true;
-    				}
-    				return false;
-    			}
-    		});
-    		listView.setBackgroundColor(android.R.attr.colorBackground);
-    		listView.setDrawSelectorOnTop(true);
-    		listView.setFastScrollEnabled(true);
-    		Themes.setContentStyle(listView, Themes.CALLER_CARDEDITOR_INTENTDIALOG);
-    		builder.setView(listView, false, true);
-			builder.setCancelable(true);
-			builder.setPositiveButton(res.getString(R.string.intent_add_clear_all), new OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int arg1) {
-					MetaDB.resetIntentInformation(CardEditor.this);
-					mIntentInformation.clear();
-					dialog.dismiss();
-				}});
-			dialog = builder.create();
-			mIntentInformationDialog = dialog;
-			break;
+		    dialog = createDialogIntentInformation(builder, res);
 		}
 		return dialog;
 	}
+
+	private StyledDialog createDialogTags(Builder builder, Resources res) {
+	    StyledDialog dialog = null;
+		builder.setTitle(R.string.studyoptions_limit_select_tags);
+		builder.setPositiveButton(res.getString(R.string.select),
+				new OnClickListener() {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						String tags = mSelectedTags.toString();
+						mFactTags = tags.substring(1, tags.length() - 1);
+						mTags.setText(getResources().getString(
+								R.string.CardEditorTags, mFactTags));
+					}
+				});
+		builder.setNegativeButton(res.getString(R.string.cancel), null);
+
+		mNewTagEditText = (EditText) new EditText(this);
+		mNewTagEditText.setHint(R.string.add_new_tag);
+
+		InputFilter filter = new InputFilter() {
+			public CharSequence filter(CharSequence source, int start,
+					int end, Spanned dest, int dstart, int dend) {
+				for (int i = start; i < end; i++) {
+					if (source.charAt(i) == ' ' || source.charAt(i) == ',') {
+						return "";
+					}
+				}
+				return null;
+			}
+		};
+		mNewTagEditText.setFilters(new InputFilter[] { filter });
+
+		ImageView mAddTextButton = new ImageView(this);
+		mAddTextButton.setImageResource(R.drawable.ic_addtag);
+		mAddTextButton.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String tag = mNewTagEditText.getText().toString();
+				if (tag.length() != 0) {
+					for (int i = 0; i < allTags.length; i++) {
+						if (allTags[i].equalsIgnoreCase(tag)) {
+							mNewTagEditText.setText("");
+							return;
+						}
+					}
+					mSelectedTags.add(tag);
+					String[] oldTags = allTags;
+					allTags = new String[oldTags.length + 1];
+					allTags[0] = tag;
+					for (int j = 1; j < allTags.length; j++) {
+						allTags[j] = oldTags[j - 1];
+					}
+					mTagsDialog.addMultiChoiceItems(tag, true);
+					mNewTagEditText.setText("");
+				}
+			}
+		});
+
+		FrameLayout frame = new FrameLayout(this);
+		FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.RIGHT
+						| Gravity.CENTER_VERTICAL);
+		params.rightMargin = 10;
+		mAddTextButton.setLayoutParams(params);
+		frame.addView(mNewTagEditText);
+		frame.addView(mAddTextButton);
+
+		builder.setView(frame, false, true);
+		dialog = builder.create();
+		mTagsDialog = dialog;
+		return dialog;
+	}
+	
+	private StyledDialog createDialogDeckSelect(Builder builder, Resources res) {
+        StyledDialog dialog = DeckManager.getSelectDeckDialog(this, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int item) {
+                loadDeck(item);
+            }
+        }, new OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface arg0) {
+                mCancelled = true;
+            }
+
+        }, new OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface arg0) {
+                if (mCancelled == true) {
+                    finish();
+                    if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
+                        ActivityTransitionAnimation.slide(CardEditor.this,
+                                ActivityTransitionAnimation.FADE);
+                    }           
+                } else if (mDeck == null) {
+                    showDialog(DIALOG_DECK_SELECT);
+                }
+            }
+        }, mCaller == CALLER_CARDEDITOR_INTENT_ADD ? null : res.getString(R.string.intent_add_save_for_later), mCaller == CALLER_CARDEDITOR_INTENT_ADD ? null : new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                MetaDB.saveIntentInformation(CardEditor.this, mSourceText, mTargetText);
+                mCancelled = true;
+                finish();
+            }               
+        });
+        return dialog;
+	}
+	
+    private StyledDialog createDialogModelSelect(Builder builder, Resources res) {
+        ArrayList<CharSequence> dialogItems = new ArrayList<CharSequence>();
+        // Use this array to know which ID is associated with each
+        // Item(name)
+        final ArrayList<Long> dialogIds = new ArrayList<Long>();
+    
+        Model mModel;
+        builder.setTitle(R.string.select_model);
+        for (Long i : mModels.keySet()) {
+            mModel = mModels.get(i);
+            dialogItems.add(mModel.getName());
+            dialogIds.add(i);
+        }
+        // Convert to Array
+        String[] items = new String[dialogItems.size()];
+        dialogItems.toArray(items);
+    
+        builder.setItems(items, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int item) {
+                long oldModelId = mCurrentSelectedModelId;
+                mCurrentSelectedModelId = dialogIds.get(item);
+                if (oldModelId != mCurrentSelectedModelId) {
+                    int size = mEditFields.size();
+                    String[] oldValues = new String[size];
+                    for (int i = 0; i < size; i++) {
+                        oldValues[i] = mEditFields.get(i).getText()
+                                .toString();
+                    }
+                    modelChanged();
+                    if ((mSourceText == null || mSourceText.length() == 0)
+                            && (mTargetText == null || mTargetText
+                                    .length() == 0)) {
+                        for (int i = 0; i < Math.min(size, mEditFields
+                                .size()); i++) {
+                            mEditFields.get(i).setText(oldValues[i]);
+                        }
+                    }
+                }
+            }
+        });
+        return builder.create();
+    }
+    
+    private StyledDialog createDialogIntentInformation(Builder builder, Resources res) {
+        builder.setTitle(res.getString(R.string.intent_add_saved_information));
+        ListView listView = new ListView(this);
+        
+        mIntentInformationAdapter = new SimpleAdapter(this, mIntentInformation, R.layout.card_item, new String[] { "source", "target", "id"}, new int[] { R.id.card_question, R.id.card_answer, R.id.card_item});
+        listView.setAdapter(mIntentInformationAdapter);
+        listView.setOnItemClickListener(new OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                Intent intent = new Intent(CardEditor.this, CardEditor.class);
+                intent.putExtra(EXTRA_CALLER, CALLER_CARDEDITOR_INTENT_ADD);
+                HashMap<String, String> map = mIntentInformation.get(position);
+                StringBuilder contents = new StringBuilder();
+                contents.append(map.get("source"))
+                    .append("\u001f")
+                    .append(map.get("target"));
+                intent.putExtra(EXTRA_CONTENTS, contents.toString());
+                intent.putExtra(EXTRA_ID, map.get("id"));
+                startActivityForResult(intent, REQUEST_INTENT_ADD);
+                if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
+                    ActivityTransitionAnimation.slide(CardEditor.this,
+                            ActivityTransitionAnimation.FADE);
+                }
+                mIntentInformationDialog.dismiss();
+            }
+        });
+        mCardItemBackground = Themes.getCardBrowserBackground()[0];
+        mIntentInformationAdapter.setViewBinder(new SimpleAdapter.ViewBinder() {
+            @Override
+            public boolean setViewValue(View view, Object arg1, String text) {
+                if (view.getId() == R.id.card_item) {
+                    view.setBackgroundResource(mCardItemBackground);
+                    return true;
+                }
+                return false;
+            }
+        });
+        listView.setBackgroundColor(android.R.attr.colorBackground);
+        listView.setDrawSelectorOnTop(true);
+        listView.setFastScrollEnabled(true);
+        Themes.setContentStyle(listView, Themes.CALLER_CARDEDITOR_INTENTDIALOG);
+        builder.setView(listView, false, true);
+        builder.setCancelable(true);
+        builder.setPositiveButton(res.getString(R.string.intent_add_clear_all), new OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int arg1) {
+                MetaDB.resetIntentInformation(CardEditor.this);
+                mIntentInformation.clear();
+                dialog.dismiss();
+            }});
+        StyledDialog dialog = builder.create();
+        mIntentInformationDialog = dialog;
+        return dialog;
+    }
 
 	@Override
 	protected void onPrepareDialog(int id, Dialog dialog) {

@@ -1,5 +1,6 @@
 AnkiDroid Flashcards
 ar: البطاقات التعليميةآنكيدرويد
+bg: AnkiDroid флашкарти
 ca: AnkiDroid fitxes per memoritzar
 cs: AnkiDroid kartičky
 de: AnkiDroid Karteikarten
@@ -10,6 +11,7 @@ fr: AnkiDroid (Cartes mémoire)
 hu: AnkiDroid tanuló kártyák
 id: Kad imbas AnkiDroid
 ja: アンキドロイド単語帳
+pt-BR: AnkiDroid Cartões de Estudo
 ru: AnkiDroid флэш-карты
 th: บัตรคำ AnkiDroid
 tr: AnkiDroid bilgi kartları
