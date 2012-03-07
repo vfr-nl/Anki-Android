@@ -20,7 +20,7 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	package="com.ichi2.anki"
-	android:versionName="1.1alpha2nobluetooth"
+	android:versionName="1.1beta22nobluetooth"
 	android:versionCode="24"
 	android:installLocation="auto">
     <instrumentation android:name="android.test.InstrumentationTestRunner" android:targetPackage="com.ichi2.anki"></instrumentation>
@@ -122,8 +122,10 @@
 			</intent-filter>
 		</service> -->
 		<service android:name="com.ichi2.anki.services.DownloadManagerService"/>
+
 		<service android:name="com.ichi2.anki.services.NotificationService"/>
-		<!-- Broadcast Receiver that will process AppWidget updates -->
+
+		<!-- medium widget -->
 		<receiver android:name="com.ichi2.widget.AnkiDroidWidgetMedium" android:label="@string/widget_medium">
 			<intent-filter>
 			<action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -131,7 +133,9 @@
 			<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_provider" />
 		</receiver>
 		<!-- Service to perform web API queries -->
-		<service android:name=".AnkiDroidWidgetMedium$UpdateService" />
+		<service android:name="com.ichi2.widget.AnkiDroidWidgetMedium$UpdateService" />
+
+		<!-- small widget -->
 		<receiver android:name="com.ichi2.widget.AnkiDroidWidgetSmall" android:label="@string/widget_small">
 			<intent-filter>
 			<action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -139,7 +143,9 @@
 			<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_provider_small" />
 		</receiver>
 		<!-- Service to perform web API queries -->
-		<service android:name=".AnkiDroidWidgetSmall$UpdateService" />
+		<service android:name="com.ichi2.widget.AnkiDroidWidgetSmall$UpdateService" />
+
+		<!-- big widget -->
 		<uses-library android:name="android.test.runner"></uses-library>
 		<receiver android:name="com.ichi2.widget.AnkiDroidWidgetBig" android:label="@string/widget_big">
 			<intent-filter>
@@ -149,6 +155,9 @@
 		</receiver>
 		<!-- Service to perform web API queries -->
 		<service android:name="com.ichi2.widget.AnkiDroidWidgetBig$UpdateService" />
+
+		<service android:name="com.ichi2.widget.WidgetContentService" />
+
 </application>
 	<uses-sdk  android:minSdkVersion="3"
                 android:maxSdkVersion="4"

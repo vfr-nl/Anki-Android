@@ -274,6 +274,7 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
 	            // Set modified also updates the text of cards and their modified flags
 	            editFact.setModified(true, deck, false);
 	            editFact.toDb();
+	            deck.updateFactTags(new long[] { editFact.getId() });
 
 	            deck.flushMod();
 
@@ -369,7 +370,7 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
         if (deck == null) {
             Log.i(AnkiDroidApp.TAG, "The database " + deckFilename + " could not be opened");
             BackupManager.cleanUpAfterBackupCreation(false);
-            return new TaskData(DECK_NOT_LOADED);            	
+            return new TaskData(DECK_NOT_LOADED, deckFilename);            	
         }
         BackupManager.cleanUpAfterBackupCreation(true);
         if (deck.hasFinishScheduler()) {

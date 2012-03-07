@@ -68,6 +68,7 @@ import com.ichi2.anki.DeckTask.TaskData;
 import com.ichi2.async.Connection;
 import com.ichi2.async.Connection.Payload;
 import com.ichi2.themes.StyledDialog;
+import com.ichi2.themes.StyledProgressDialog;
 import com.ichi2.themes.Themes;
 import com.ichi2.widget.WidgetStatus;
 import com.tomgibara.android.veecheck.util.PrefSettings;
@@ -161,7 +162,7 @@ public class DeckPicker extends Activity implements Runnable {
 
 	private DeckPicker mSelf;
 
-	private ProgressDialog mProgressDialog;
+	private StyledProgressDialog mProgressDialog;
 	private StyledDialog mSyncLogAlert;
 	private StyledDialog mUpgradeNotesAlert;
 	private StyledDialog mMissingMediaAlert;
@@ -452,7 +453,7 @@ public class DeckPicker extends Activity implements Runnable {
 		@Override
 		public void onPreExecute() {
 			if (mProgressDialog == null || !mProgressDialog.isShowing()) {
-				mProgressDialog = ProgressDialog.show(DeckPicker.this, getResources().getString(R.string.sync_all_title), getResources().getString(R.string.sync_prepare_syncing), true);
+				mProgressDialog = StyledProgressDialog.show(DeckPicker.this, getResources().getString(R.string.sync_all_title), getResources().getString(R.string.sync_prepare_syncing), true);
 			}
 		}
 
@@ -726,7 +727,7 @@ public class DeckPicker extends Activity implements Runnable {
 										MyAccount.class);
 								myAccount.putExtra("notLoggedIn", true);
 								startActivityForResult(myAccount, LOG_IN_FOR_SYNC);
-						        if (StudyOptions.getApiLevel() > 4) {
+						        if (Utils.getApiLevel() > 4) {
 						            ActivityTransitionAnimation.slide(DeckPicker.this, ActivityTransitionAnimation.LEFT);
 						        }
 							}
@@ -741,7 +742,7 @@ public class DeckPicker extends Activity implements Runnable {
 										MyAccount.class);
 								myAccount.putExtra("notLoggedIn", true);
 								startActivityForResult(myAccount, LOG_IN_FOR_DOWNLOAD);
-						        if (StudyOptions.getApiLevel() > 4) {
+						        if (Utils.getApiLevel() > 4) {
 						            ActivityTransitionAnimation.slide(DeckPicker.this, ActivityTransitionAnimation.LEFT);
 						        }
 							}
@@ -992,15 +993,15 @@ public class DeckPicker extends Activity implements Runnable {
 					String action = intent.getAction();
 					if (action.equals(Intent.ACTION_MEDIA_UNMOUNTED)) {
 						Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Unmounted");
-						SharedPreferences preferences = PreferenceManager
-								.getDefaultSharedPreferences(getBaseContext());
+						SharedPreferences preferences = PrefSettings
+								.getSharedPrefs(getBaseContext());
 						String deckPath = preferences.getString("deckPath",
 								AnkiDroidApp.getStorageDirectory());
 						populateDeckList(deckPath);
 					} else if (action.equals(Intent.ACTION_MEDIA_MOUNTED)) {
 						Log.i(AnkiDroidApp.TAG, "DeckPicker - mUnmountReceiver, Action = Media Mounted");
-						SharedPreferences preferences = PreferenceManager
-								.getDefaultSharedPreferences(getBaseContext());
+						SharedPreferences preferences = PrefSettings
+								.getSharedPrefs(getBaseContext());
 						String deckPath = preferences.getString("deckPath",
 								AnkiDroidApp.getStorageDirectory());
 						mDeckIsSelected = false;
@@ -1027,7 +1028,7 @@ public class DeckPicker extends Activity implements Runnable {
 			finish();
 		} else {
 			finish();
-			if (StudyOptions.getApiLevel() > 4) {
+			if (getIntent().getBooleanExtra("showAnimation", false) && Utils.getApiLevel() > 4) {
 	    			ActivityTransitionAnimation.slide(this, ActivityTransitionAnimation.LEFT);
     		}
 		}
@@ -1098,7 +1099,7 @@ public class DeckPicker extends Activity implements Runnable {
         builder.setTitle(res.getString(R.string.deckpicker_download_missing_title));
         builder.setPositiveButton(res.getString(R.string.ok), null);
         mMissingMediaAlert = builder.create();
-        mProgressDialog = new ProgressDialog(DeckPicker.this);
+        mProgressDialog = new StyledProgressDialog(DeckPicker.this);
         mProgressDialog.setTitle(R.string.deckpicker_download_missing_title);
         mProgressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
         mProgressDialog.setMax(100);
@@ -1254,7 +1255,7 @@ public class DeckPicker extends Activity implements Runnable {
         switch (item.getItemId()) {
             case MENU_CREATE_DECK:
                 startActivityForResult(new Intent(DeckPicker.this, DeckCreator.class), CREATE_DECK);
-                if (StudyOptions.getApiLevel() > 4) {
+                if (Utils.getApiLevel() > 4) {
                     ActivityTransitionAnimation.slide(DeckPicker.this, ActivityTransitionAnimation.RIGHT);
                 }
                 return true;
@@ -1588,7 +1589,7 @@ public class DeckPicker extends Activity implements Runnable {
     public void openPersonalDeckPicker() {
         if (AnkiDroidApp.isUserLoggedIn()) {
             startActivityForResult(new Intent(this, PersonalDeckPicker.class), DOWNLOAD_PERSONAL_DECK);
-            if (StudyOptions.getApiLevel() > 4) {
+            if (Utils.getApiLevel() > 4) {
                 ActivityTransitionAnimation.slide(this, ActivityTransitionAnimation.RIGHT);
             }
         } else {
@@ -1600,7 +1601,7 @@ public class DeckPicker extends Activity implements Runnable {
     public void openSharedDeckPicker() {
         // deckLoaded = false;
         startActivityForResult(new Intent(this, SharedDeckPicker.class), DOWNLOAD_SHARED_DECK);
-        if (StudyOptions.getApiLevel() > 4) {
+        if (Utils.getApiLevel() > 4) {
             ActivityTransitionAnimation.slide(this, ActivityTransitionAnimation.RIGHT);
         }
     }
@@ -1721,7 +1722,7 @@ public class DeckPicker extends Activity implements Runnable {
 		    	} else {
 			    	Intent intent = new Intent(DeckPicker.this, com.ichi2.charts.ChartBuilder.class);
 			    	startActivity(intent);
-			        if (StudyOptions.getApiLevel() > 4) {
+			        if (Utils.getApiLevel() > 4) {
 			            ActivityTransitionAnimation.slide(DeckPicker.this, ActivityTransitionAnimation.DOWN);
 			        }	
 		    	}
@@ -1730,7 +1731,7 @@ public class DeckPicker extends Activity implements Runnable {
 
 		@Override
 		public void onPreExecute() {
-            mProgressDialog = ProgressDialog.show(DeckPicker.this, "", getResources()
+            mProgressDialog = StyledProgressDialog.show(DeckPicker.this, "", getResources()
                     .getString(R.string.calculating_statistics), true);
 		}
 
@@ -1745,7 +1746,7 @@ public class DeckPicker extends Activity implements Runnable {
 
     	@Override
         public void onPreExecute() {
-            mProgressDialog = ProgressDialog.show(DeckPicker.this, "", getResources()
+            mProgressDialog = StyledProgressDialog.show(DeckPicker.this, "", getResources()
                     .getString(R.string.backup_repair_deck_progress), true);
         }
 
@@ -1773,7 +1774,7 @@ public class DeckPicker extends Activity implements Runnable {
 
     	@Override
         public void onPreExecute() {
-            mProgressDialog = ProgressDialog.show(DeckPicker.this, "", getResources()
+            mProgressDialog = StyledProgressDialog.show(DeckPicker.this, "", getResources()
                     .getString(R.string.backup_restore_deck), true);
         }
 
@@ -1825,7 +1826,7 @@ public class DeckPicker extends Activity implements Runnable {
 
 		@Override
 		public void onPreExecute() {
-            mProgressDialog = ProgressDialog.show(DeckPicker.this, "", getResources()
+            mProgressDialog = StyledProgressDialog.show(DeckPicker.this, "", getResources()
                     .getString(R.string.optimize_deck_dialog), true);
 		}
 

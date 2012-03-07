@@ -19,6 +19,8 @@ import android.content.DialogInterface.OnDismissListener;
 import android.database.Cursor;
 import android.os.AsyncTask;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 
 public class DeckManager {
 
@@ -136,7 +138,9 @@ public class DeckManager {
     			} else if (rebuild) {
             		if (!deckInformation.mInitiallyRebuilt) {
         					Log.i(AnkiDroidApp.TAG, "DeckManager: reopen deck in order to rebuild");
-        					deck.closeDeck(false);
+        					if (deck != null) {
+            					deck.closeDeck(false);        						
+        					}
         					deckInformation.mDeck = Deck.openDeck(deckpath, true, requestingActivity == REQUESTING_ACTIVITY_SYNCCLIENT);
         					deckInformation.mInitiallyRebuilt = true;
         					WidgetStatus.update(AnkiDroidApp.getInstance().getBaseContext(), WidgetStatus.getDeckStatus(deck));
@@ -369,6 +373,9 @@ public class DeckManager {
 
 
 	public static StyledDialog getSelectDeckDialog(Context context, OnClickListener itemClickListener, OnCancelListener cancelListener, OnDismissListener dismissListener) {
+		return getSelectDeckDialog(context, itemClickListener, cancelListener, dismissListener, null, null);
+	}
+	public static StyledDialog getSelectDeckDialog(Context context, OnClickListener itemClickListener, OnCancelListener cancelListener, OnDismissListener dismissListener, String buttonTitle, View.OnClickListener buttonClickListener) {
 		int len = 0;
 		File[] fileList;
 
@@ -402,6 +409,14 @@ public class DeckManager {
 		builder.setItems(sDeckNames, itemClickListener);
 		builder.setOnCancelListener(cancelListener);
 		builder.setOnDismissListener(dismissListener);
+
+		if (buttonTitle != null) {
+			Button button = new Button(context, null, android.R.attr.buttonStyleSmall);
+			button.setText(buttonTitle);
+			button.setOnClickListener(buttonClickListener);
+			builder.setView(button, false, true);
+		}
+
 		return builder.create();
 	}
 

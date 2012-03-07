@@ -1,13 +1,15 @@
 package com.ichi2.anki;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.util.Log;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -23,6 +25,9 @@ import android.util.Log;
 public class MetaDB {
     /** The name of the file storing the meta-db. */
     private static final String DATABASE_NAME = "ankidroid.db";
+
+    /** The Database Version, increase if you want updates to happen on next upgrade. */
+    private static final int DATABASE_VERSION = 1;
 
     // Possible values for the qa column of the languages table.
     /** The language refers to the question. */
@@ -47,10 +52,25 @@ public class MetaDB {
     }
 
 
-    /** Open the meta-db and creates any table that is missing. */
+    /** Open the meta-db */
     private static void openDB(Context context) {
         try {
-            mMetaDb = context.openOrCreateDatabase(DATABASE_NAME,  0, null);
+            mMetaDb = context.openOrCreateDatabase(DATABASE_NAME, 0, null);
+            if (mMetaDb.needUpgrade(DATABASE_VERSION)) {
+                mMetaDb = upgradeDB(mMetaDb, DATABASE_VERSION);
+            }
+            Log.i(AnkiDroidApp.TAG, "Opening MetaDB");
+        } catch (Exception e) {
+            Log.e("Error", "Error opening MetaDB ", e);
+        }
+    }
+
+    /** Creating any table that missing and upgrading necessary tables. */
+    private static SQLiteDatabase upgradeDB(SQLiteDatabase mMetaDb, int databaseVersion) {
+        Log.i(AnkiDroidApp.TAG, "Upgrading Internal Database..");
+//        if (mMetaDb.getVersion() == 0) {
+            Log.i(AnkiDroidApp.TAG, "Applying changes for version: 0");
+            // Create tables if not exist
             mMetaDb.execSQL(
                     "CREATE TABLE IF NOT EXISTS languages ("
                             + " _id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -69,20 +89,38 @@ public class MetaDB {
                             + "deckpath TEXT NOT NULL, "
                             + "dictionary INTEGER)");
             mMetaDb.execSQL(
-                    "CREATE TABLE IF NOT EXISTS widgetStatus ("
-                    + "deckPath TEXT NOT NULL PRIMARY KEY, "
-                    + "deckName TEXT NOT NULL, "
-                    + "newCards INTEGER NOT NULL, "
-                    + "dueCards INTEGER NOT NULL, "
-                    + "failedCards INTEGER NOT NULL, "
-            		+ "eta INTEGER NOT NULL, "
-            		+ "time INTEGER NOT NULL)");
-        Log.i(AnkiDroidApp.TAG, "Opening MetaDB");
-        } catch(Exception e) {
-            Log.e("Error", "Error opening MetaDB ", e);
-        }
+                    "CREATE TABLE IF NOT EXISTS intentInformation ("
+                            + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                            + "source TEXT NOT NULL, "
+                            + "target INTEGER NOT NULL)");
+            // Use pragma to get info about widgetStatus.
+            Cursor c = mMetaDb.rawQuery("PRAGMA table_info(widgetStatus)", null);
+            int columnNumber = c.getCount();
+            if (columnNumber > 0) {
+                if (columnNumber < 7) {
+                    mMetaDb.execSQL(
+                            "ALTER TABLE widgetStatus "
+                                    + "ADD COLUMN eta INTEGER NOT NULL DEFAULT '0'");
+                    mMetaDb.execSQL(
+                            "ALTER TABLE widgetStatus "
+                                    + "ADD COLUMN time INTEGER NOT NULL DEFAULT '0'");
+                }
+            } else {
+                mMetaDb.execSQL(
+                        "CREATE TABLE IF NOT EXISTS widgetStatus ("
+                                + "deckPath TEXT NOT NULL PRIMARY KEY, "
+                                + "deckName TEXT NOT NULL, "
+                                + "newCards INTEGER NOT NULL, "
+                                + "dueCards INTEGER NOT NULL, "
+                                + "failedCards INTEGER NOT NULL, "
+                                + "eta INTEGER NOT NULL, "
+                                + "time INTEGER NOT NULL)");
+            }
+//        }
+        mMetaDb.setVersion(databaseVersion);
+        Log.i(AnkiDroidApp.TAG, "Upgrading Internal Database finished. New version: " + databaseVersion);
+        return mMetaDb;
     }
-
 
     /** Open the meta-db but only if it currently closed. */
     private static void openDBIfClosed(Context context) {
@@ -114,6 +152,9 @@ public class MetaDB {
             Log.i(AnkiDroidApp.TAG, "Resetting custom Dictionary");
             mMetaDb.execSQL("DROP TABLE IF EXISTS widgetStatus;");
             Log.i(AnkiDroidApp.TAG, "Resetting widget status");
+            mMetaDb.execSQL("DROP TABLE IF EXISTS intentInformation;");
+            Log.i(AnkiDroidApp.TAG, "Resetting intentInformation");
+            upgradeDB(mMetaDb, DATABASE_VERSION);
             return true;
         } catch(Exception e) {
             Log.e("Error", "Error resetting MetaDB ", e);
@@ -150,7 +191,24 @@ public class MetaDB {
             openDB(context);
             return true;
         } catch(Exception e) {
-            Log.e("Error", "Error resetting MetaDB ", e);
+            Log.e("Error", "Error resetting widgetStatus ", e);
+        }
+        return false;
+    }
+
+
+    /** Reset the intent information. */
+    public static boolean resetIntentInformation(Context context) {
+        if (mMetaDb == null || !mMetaDb.isOpen()) {
+            openDB(context);
+        }
+        try {
+            Log.i(AnkiDroidApp.TAG, "Resetting intent information");
+            mMetaDb.execSQL("DROP TABLE IF EXISTS intentInformation;");
+            openDB(context);
+            return true;
+        } catch(Exception e) {
+            Log.e("Error", "Error resetting intentInformation ", e);
         }
         return false;
     }
@@ -256,7 +314,7 @@ public class MetaDB {
             if (cur.moveToNext()) {
                 return cur.getInt(0);
             } else {
-                return 0;
+                return 1;
             }
         } catch(Exception e) {
             Log.e("Error", "Error retrieving whiteboard state from MetaDB ", e);
@@ -488,5 +546,59 @@ public class MetaDB {
             closeDB();
             Log.i(AnkiDroidApp.TAG, "Trying to reset Widget: " + resetWidget(context));
         }
+    }
+
+
+    public static ArrayList<HashMap<String, String>> getIntentInformation(Context context) {
+        openDBIfClosed(context);
+        Cursor cursor = null;
+        ArrayList<HashMap<String, String>> list = new ArrayList<HashMap<String, String>>();
+        try {
+            cursor = mMetaDb.query("intentInformation",
+                    new String[]{"id", "source", "target"},
+                    null, null, null, null, "id");
+            while (cursor.moveToNext()) {
+            	HashMap<String, String> item = new HashMap<String, String>();
+            	item.put("id", Integer.toString(cursor.getInt(0)));
+            	item.put("source", cursor.getString(1));
+            	item.put("target", cursor.getString(2));
+            	list.add(item);
+            }
+        } catch (SQLiteException e) {
+            Log.e(AnkiDroidApp.TAG, "Error while querying intentInformation", e);
+        } finally {
+            if (cursor != null && !cursor.isClosed()) {
+                cursor.close();
+            }
+        }
+        return list;
+    }
+
+
+    public static void saveIntentInformation(Context context, String source, String target) {
+        openDBIfClosed(context);
+        try {
+            mMetaDb.execSQL("INSERT INTO intentInformation (source, target) "
+                            + " VALUES (?, ?);",
+                            new Object[]{source, target});
+            Log.i(AnkiDroidApp.TAG, "Store intentInformation: " + source + " - " + target);
+        } catch(Exception e) {
+            Log.e("Error", "Error storing intentInformation in MetaDB ", e);
+        }
+    }
+
+
+    public static boolean removeIntentInformation(Context context, String id) {
+        if (mMetaDb == null || !mMetaDb.isOpen()) {
+            openDB(context);
+        }
+        try {
+            Log.i(AnkiDroidApp.TAG, "Deleting intent information " + id);
+            mMetaDb.execSQL("DELETE FROM intentInformation WHERE id = " + id + ";");
+            return true;
+        } catch(Exception e) {
+            Log.e("Error", "Error deleting intentInformation " + id + ": ", e);
+        }
+        return false;
     }
 }

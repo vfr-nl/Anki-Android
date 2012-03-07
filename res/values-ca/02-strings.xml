@@ -67,12 +67,13 @@
   <string name="error_insufficient_memory">No hi ha suficient memòria al dispositiu per a aquesta operació</string>
   <string name="tutorial_load">Creant paquet Tutorial</string>
   <string name="tutorial_loading_error">No ha estat possible generar el paquet de mostra</string>
-  <string name="rename">Rename</string>
+  <string name="rename">Canvia el nom</string>
   <string name="rename_error">Deck %s could not be renamed</string>
   <string name="help_title">Ajuda</string>
   <string name="help_online">Ajuda online</string>
   <string name="help_faq">PMF</string>
   <string name="help_tutorial">Paquet Tutorial</string>
+  <string name="simple_interface_hint">Empty %s. Bear in mind that simple interface cannot show pictures/sounds etc.</string>
   <plurals name="factadder_cards_added">
     <item quantity="one">1 card added</item>
     <item quantity="other">%d cards added</item>
