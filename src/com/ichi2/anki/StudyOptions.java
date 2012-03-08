@@ -649,6 +649,7 @@ public class StudyOptions extends Activity {
        			return false;
        		}
        	};
+       	mCompat = Utils.createCompat();
     }
 
 
