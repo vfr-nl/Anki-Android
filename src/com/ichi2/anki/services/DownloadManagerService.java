@@ -934,9 +934,13 @@ public class DownloadManagerService extends Service {
         protected Payload doInBackground(Payload... args) {
 
             Payload data = doInBackgroundLoadDeck(args);
-            if (data.returnType == DeckTask.DECK_LOADED) {
+            if (data.success == true && data.returnType == DeckTask.DECK_LOADED) {
                 HashMap<String, Object> results = (HashMap<String, Object>) data.result;
                 Deck deck = (Deck) results.get("deck");
+                if (deck == null) {
+                	data.success = false;
+                	return data;
+                }
                 if (!deck.isUnpackNeeded()) {
                     data.success = true;
                     return data;
@@ -1021,6 +1025,10 @@ public class DownloadManagerService extends Service {
             try {
                 // Open the right deck.
                 Deck deck = DeckManager.getDeck(deckFilename, DeckManager.REQUESTING_ACTIVITY_DOWNLOADMANAGER);
+                if (deck == null) {
+                	data.success = false;
+                	return data;
+                }
                 // Start by getting the first card and displaying it.
                 Card card = deck.getCard();
                 Log.i(AnkiDroidApp.TAG, "Deck loaded!");
@@ -1053,10 +1061,12 @@ public class DownloadManagerService extends Service {
         @Override
         protected void onPostExecute(Payload result) {
             super.onPostExecute(result);
-            HashMap<String, Object> results = (HashMap<String, Object>) result.result;
-            Deck deck = (Deck) results.get("deck");
-            // Close the previously opened deck.
-            DeckManager.closeDeck(deck.getDeckPath());
+            if (result.success) {
+            	HashMap<String, Object> results = (HashMap<String, Object>) result.result;
+            	Deck deck = (Deck) results.get("deck");
+            	//Close the previously opened deck.
+            	DeckManager.closeDeck(deck.getDeckPath());
+            }
 
             SharedDeckDownload download = (SharedDeckDownload) result.data[0];
             SharedPreferences pref = PrefSettings.getSharedPrefs(getBaseContext());
